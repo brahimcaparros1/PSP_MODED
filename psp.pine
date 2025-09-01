@@ -1,0 +1,201 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+//@version=6
+indicator('QT Insights [Pro +]: PSP / PC [cephxs]', 'PSP [Pro +] | cephxs', overlay = true)
+
+// ==================== PSP SETTINGS ====================
+// Pair Configuration
+g_pair1 = "Pair 1 Configuration"
+asset1_pair1_input = input.symbol("ES1!", "Asset 1", group=g_pair1)
+asset2_pair1_input = input.symbol("NQ1!", "Asset 2", group=g_pair1)
+
+g_pair2 = "Pair 2 Configuration"
+asset1_pair2_input = input.symbol("EURUSD", "Asset 1", group=g_pair2)
+asset2_pair2_input = input.symbol("GBPUSD", "Asset 2", group=g_pair2)
+
+g_pair3 = "Pair 3 Configuration"
+asset1_pair3_input = input.symbol("6E1!", "Asset 1", group=g_pair3)
+asset2_pair3_input = input.symbol("6B1!", "Asset 2", group=g_pair3)
+
+g_pair4 = "Pair 4 Configuration"
+asset1_pair4_input = input.symbol("BINANCE:BTCUSDT.P", "Asset 1", group=g_pair4)
+asset2_pair4_input = input.symbol("BINANCE:ETHUSDT.P", "Asset 2", group=g_pair4)
+
+// Display Settings
+g_displaySettings = "Display Settings"
+mode = input.string('All precision candles', 'Mode', options = ['PSP only', 'All precision candles'], group = g_displaySettings, tooltip = 'Select the mode for highlighting candles. \'All precision candles\' highlights all divergence candles, while \'PSP only\' highlights only Precision Swing Points with divergence.')
+showDebug = input.bool(false, 'Show Debug Info', group = g_displaySettings, tooltip = 'Show debug information about current symbol and active pair')
+
+// ==================== PSP FUNCTIONS ====================
+// Function to extract symbol without exchange prefix
+extractSymbol(fullSymbol) =>
+    if str.contains(fullSymbol, ":")
+        // Split at colon and take the part after it
+        parts = str.split(fullSymbol, ":")
+        array.size(parts) > 1 ? array.get(parts, 1) : fullSymbol
+    else
+        fullSymbol
+
+// Get the current chart symbol and check if it's part of any configured pair
+currentSymbol = syminfo.ticker
+
+// Extract clean symbols from inputs
+asset1_pair1_clean = extractSymbol(asset1_pair1_input)
+asset2_pair1_clean = extractSymbol(asset2_pair1_input)
+asset1_pair2_clean = extractSymbol(asset1_pair2_input)
+asset2_pair2_clean = extractSymbol(asset2_pair2_input)
+asset1_pair3_clean = extractSymbol(asset1_pair3_input)
+asset2_pair3_clean = extractSymbol(asset2_pair3_input)
+asset1_pair4_clean = extractSymbol(asset1_pair4_input)
+asset2_pair4_clean = extractSymbol(asset2_pair4_input)
+
+// Check which pair the current symbol belongs to (if any)
+isAsset1_Pair1 = currentSymbol == asset1_pair1_clean
+isAsset2_Pair1 = currentSymbol == asset2_pair1_clean
+isAsset1_Pair2 = currentSymbol == asset1_pair2_clean
+isAsset2_Pair2 = currentSymbol == asset2_pair2_clean
+isAsset1_Pair3 = currentSymbol == asset1_pair3_clean
+isAsset2_Pair3 = currentSymbol == asset2_pair3_clean
+isAsset1_Pair4 = currentSymbol == asset1_pair4_clean
+isAsset2_Pair4 = currentSymbol == asset2_pair4_clean
+
+// Determine which pair the current symbol belongs to
+belongsToPair1 = isAsset1_Pair1 or isAsset2_Pair1
+belongsToPair2 = isAsset1_Pair2 or isAsset2_Pair2
+belongsToPair3 = isAsset1_Pair3 or isAsset2_Pair3
+belongsToPair4 = isAsset1_Pair4 or isAsset2_Pair4
+belongsToAnyPair = belongsToPair1 or belongsToPair2 or belongsToPair3 or belongsToPair4
+
+// Debug labels (only show if enabled)
+var label debugLabel = na
+if showDebug
+    pairInfo = ""
+    if belongsToPair1
+        pairInfo := "Pair1: " + asset1_pair1_clean + "/" + asset2_pair1_clean
+    else if belongsToPair2  
+        pairInfo := "Pair2: " + asset1_pair2_clean + "/" + asset2_pair2_clean
+    else if belongsToPair3
+        pairInfo := "Pair3: " + asset1_pair3_clean + "/" + asset2_pair3_clean
+    else if belongsToPair4
+        pairInfo := "Pair4: " + asset1_pair4_clean + "/" + asset2_pair4_clean
+    else
+        pairInfo := "No pair found"
+
+    debugText = "Current: " + currentSymbol + " | " + pairInfo
+    if na(debugLabel)
+        debugLabel := label.new(bar_index, high, debugText, style=label.style_label_down, color=color.blue, textcolor=color.white, size=size.small)
+    else
+        label.set_text(debugLabel, debugText)
+        label.set_xy(debugLabel, bar_index, high)
+else
+    // Remove debug label if debug is disabled
+    if not na(debugLabel)
+        label.delete(debugLabel)
+        debugLabel := na
+
+// If current symbol doesn't belong to any pair, show warning
+var label infoLabel = na
+if not belongsToAnyPair
+    if na(infoLabel)
+        infoLabel := label.new(bar_index, high + ta.tr, "Symbol not part of configured pairs", 
+                              style=label.style_label_down, color=color.yellow, textcolor=color.black, size=size.small)
+    label.set_xy(infoLabel, bar_index, high + ta.tr)
+
+// Determine which assets to fetch data for based on current symbol
+asset1 = if belongsToPair1
+    asset1_pair1_input
+else if belongsToPair2
+    asset1_pair2_input
+else if belongsToPair3
+    asset1_pair3_input
+else if belongsToPair4
+    asset1_pair4_input
+else
+    na
+
+asset2 = if belongsToPair1
+    asset2_pair1_input
+else if belongsToPair2
+    asset2_pair2_input
+else if belongsToPair3
+    asset2_pair3_input
+else if belongsToPair4
+    asset2_pair4_input
+else
+    na
+
+// Fetch data for the relevant pair only
+asset1_open = belongsToAnyPair ? request.security(asset1, timeframe.period, open) : na
+asset1_close = belongsToAnyPair ? request.security(asset1, timeframe.period, close) : na
+asset2_open = belongsToAnyPair ? request.security(asset2, timeframe.period, open) : na
+asset2_close = belongsToAnyPair ? request.security(asset2, timeframe.period, close) : na
+
+// Calculate divergence for the current pair only
+bullish1 = belongsToAnyPair and asset1_close > asset1_open
+bearish1 = belongsToAnyPair and asset1_close < asset1_open
+bullish2 = belongsToAnyPair and asset2_close > asset2_open
+bearish2 = belongsToAnyPair and asset2_close < asset2_open
+
+// Calculate divergence using the exact logic from the working original
+divergence = belongsToAnyPair and ((bullish1 and bearish2) or (bearish1 and bullish2))
+
+// Overall highlight condition
+highlight = belongsToAnyPair and barstate.isconfirmed and divergence
+
+// Determine overall bullish/bearish direction based on the current chart asset
+overallBullish = belongsToAnyPair and bullish1
+overallBearish = belongsToAnyPair and bearish1
+
+// Detect swing points for PSP mode
+pivothigh = ta.pivothigh(high, 1, 1)
+pivotlow = ta.pivotlow(low, 1, 1)
+is_swing_high = not na(pivothigh)
+is_swing_low = not na(pivotlow)
+isPsp = (is_swing_high or is_swing_low) and highlight[1] // Check divergence on swing point candle
+
+
+// ==================== EXECUTE PSP LOGIC
+// Define da conditions for direct PSP detection
+isSwingHigh = high > high[1] and high > high[0]
+isSwingLow = low < low[1] and low < low[0]
+isPSP = (isSwingHigh or isSwingLow) and highlight
+
+// Set bar color based on display mode and PSP mode
+var color barColor = na
+if mode == 'All precision candles'
+    barColor := highlight ? (overallBullish ? color.rgb(103, 143, 109) : color.rgb(219, 87, 85)) : na
+else if mode != 'All precision candles'
+    barColor := isPsp ? (overallBullish[1] ? color.rgb(117, 173, 120) : color.rgb(182, 105, 107)) : na
+
+barcolor(barColor, offset = -1)// Apply bar color
+
+// Plot shapes for 'All precision candles' mode
+plotshape(mode == 'All precision candles' and highlight and overallBullish, 
+          style = shape.circle, 
+          location = location.belowbar, 
+          color = color.rgb(103, 143, 109), 
+          size = size.auto, 
+          title = 'Bullish PC')
+
+plotshape(mode == 'All precision candles' and highlight and overallBearish, 
+          style = shape.circle, 
+          location = location.abovebar, 
+          color = color.rgb(219, 87, 85), 
+          size = size.auto, 
+          title = 'Bearish PC')
+
+// Plot shapes for 'PSP only' mode
+plotshape(mode == 'PSP only' and isPsp and overallBullish[1], 
+          style = shape.circle, 
+          location = location.belowbar, 
+          color = color.rgb(117, 173, 120), 
+          size = size.auto, 
+          offset = -1, 
+          title = 'Bullish PSP')
+
+plotshape(mode == 'PSP only' and isPsp and overallBearish[1], 
+          style = shape.circle, 
+          location = location.abovebar, 
+          color = color.rgb(182, 105, 107), 
+          size = size.auto, 
+          offset = -1, 
+          title = 'Bearish PSP')
