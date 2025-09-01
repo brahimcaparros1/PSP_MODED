@@ -25,6 +25,12 @@ g_displaySettings = "Display Settings"
 mode = input.string('All precision candles', 'Mode', options = ['PSP only', 'All precision candles'], group = g_displaySettings, tooltip = 'Select the mode for highlighting candles. \'All precision candles\' highlights all divergence candles, while \'PSP only\' highlights only Precision Swing Points with divergence.')
 showDebug = input.bool(false, 'Show Debug Info', group = g_displaySettings, tooltip = 'Show debug information about current symbol and active pair')
 
+// Open Divergence Settings
+g_openDivergence = "Open Divergence Lines"
+showOpenDivergence = input.bool(true, 'Show Open Divergence Lines', group = g_openDivergence, tooltip = 'Draw lines when opens show divergence trend between assets')
+openDivergenceMode = input.string('Latest Only', 'Line Display Mode', options = ['All Lines', 'Latest Only'], group = g_openDivergence, tooltip = 'All Lines: Keep all divergence lines | Latest Only: Keep only the most recent lines')
+maxLines = input.int(5, 'Max Lines (Latest Only)', minval = 1, maxval = 20, group = g_openDivergence, tooltip = 'Maximum number of lines to display in Latest Only mode')
+
 // ==================== PSP FUNCTIONS ====================
 // Function to extract symbol without exchange prefix
 extractSymbol(fullSymbol) =>
@@ -123,11 +129,20 @@ else if belongsToPair4
 else
     na
 
+// Array to store divergence lines for Latest Only mode
+var array<line> divergenceLines = array.new<line>()
+
 // Fetch data for the relevant pair only
 asset1_open = belongsToAnyPair ? request.security(asset1, timeframe.period, open) : na
 asset1_close = belongsToAnyPair ? request.security(asset1, timeframe.period, close) : na
 asset2_open = belongsToAnyPair ? request.security(asset2, timeframe.period, open) : na
 asset2_close = belongsToAnyPair ? request.security(asset2, timeframe.period, close) : na
+
+// Fetch opens for the candles surrounding a divergence
+// Open 2 bars ago (before divergence candle)
+asset1_open_before = belongsToAnyPair ? request.security(asset1, timeframe.period, open[2]) : na
+asset2_open_before = belongsToAnyPair ? request.security(asset2, timeframe.period, open[2]) : na
+// Current open will be used for the candle after divergence
 
 // Calculate divergence for the current pair only
 bullish1 = belongsToAnyPair and asset1_close > asset1_open
@@ -138,12 +153,60 @@ bearish2 = belongsToAnyPair and asset2_close < asset2_open
 // Calculate divergence using the exact logic from the working original
 divergence = belongsToAnyPair and ((bullish1 and bearish2) or (bearish1 and bullish2))
 
-// Overall highlight condition
-highlight = belongsToAnyPair and barstate.isconfirmed and divergence
+// Overall highlight condition (current bar)
+current_highlight = belongsToAnyPair and barstate.isconfirmed and divergence
+
+// Check if previous candle had divergence
+had_divergence_prev = current_highlight[1]
+
+// Set highlight for display
+highlight = current_highlight
+
+// Determine if current symbol is asset1 or asset2 of the active pair
+isCurrentAsset1 = isAsset1_Pair1 or isAsset1_Pair2 or isAsset1_Pair3 or isAsset1_Pair4
+
+// Calculate open trend divergence between candles surrounding the divergent one
+open_divergence_exists = false
+open_divergence_bullish = false
+open_divergence_bearish = false
+
+if belongsToAnyPair and showOpenDivergence and had_divergence_prev
+    // Trend from before divergence to after (current)
+    // Asset 1 trend: from open[2] to open[0]
+    asset1_trend_up = asset1_open > asset1_open_before
+    asset1_trend_down = asset1_open < asset1_open_before
+    
+    // Asset 2 trend: from open[2] to open[0]
+    asset2_trend_up = asset2_open > asset2_open_before
+    asset2_trend_down = asset2_open < asset2_open_before
+    
+    // Divergence: opposite trends
+    open_divergence_bullish := asset1_trend_up and asset2_trend_down
+    open_divergence_bearish := asset1_trend_down and asset2_trend_up
+    open_divergence_exists := open_divergence_bullish or open_divergence_bearish
+
+// Draw lines between opens surrounding the divergent candle
+if had_divergence_prev and open_divergence_exists and barstate.isconfirmed and showOpenDivergence
+    // Line color based on divergence type
+    lineColor = open_divergence_bullish ? color.rgb(0, 255, 0, 0) : color.rgb(255, 0, 0, 0)
+    
+    // Line connects open[2] to open[0], spanning over divergent candle[1]
+    // Use correct opens based on current asset
+    openBefore = isCurrentAsset1 ? asset1_open_before : asset2_open_before
+    openCurrent = isCurrentAsset1 ? asset1_open : asset2_open
+    divergenceLine = line.new(x1 = bar_index[2], y1 = openBefore, x2 = bar_index, y2 = openCurrent, color = lineColor, width = 2, style = line.style_solid)
+    
+    // Manage lines based on display mode
+    if openDivergenceMode == 'Latest Only'
+        array.push(divergenceLines, divergenceLine)
+        if array.size(divergenceLines) > maxLines
+            oldLine = array.shift(divergenceLines)
+            line.delete(oldLine)
+    // If 'All Lines' mode, just leave the line (no management needed)
 
 // Determine overall bullish/bearish direction based on the current chart asset
-overallBullish = belongsToAnyPair and bullish1
-overallBearish = belongsToAnyPair and bearish1
+overallBullish = belongsToAnyPair and (isCurrentAsset1 ? bullish1 : bullish2)
+overallBearish = belongsToAnyPair and (isCurrentAsset1 ? bearish1 : bearish2)
 
 // Detect swing points for PSP mode
 pivothigh = ta.pivothigh(high, 1, 1)
@@ -199,3 +262,9 @@ plotshape(mode == 'PSP only' and isPsp and overallBearish[1],
           size = size.auto, 
           offset = -1, 
           title = 'Bearish PSP')
+
+// Clean up lines when open divergence feature is disabled
+if not showOpenDivergence and array.size(divergenceLines) > 0
+    for i = 0 to array.size(divergenceLines) - 1
+        line.delete(array.get(divergenceLines, i))
+    array.clear(divergenceLines)
