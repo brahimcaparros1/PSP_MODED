@@ -22,7 +22,7 @@ asset2_pair4_input = input.symbol("BINANCE:ETHUSDT.P", "Asset 2", group=g_pair4)
 
 // Display Settings
 g_displaySettings = "Display Settings"
-mode = input.string('All precision candles', 'Mode', options = ['PSP only', 'All precision candles'], group = g_displaySettings, tooltip = 'Select the mode for highlighting candles. \'All precision candles\' highlights all divergence candles, while \'PSP only\' highlights only Precision Swing Points with divergence.')
+mode = input.string('PSP only', 'Mode', options = ['PSP only', 'All precision candles'], group = g_displaySettings, tooltip = 'Select the mode for highlighting candles. \'All precision candles\' highlights all divergence candles, while \'PSP only\' highlights only Precision Swing Points with divergence.')
 showDebug = input.bool(false, 'Show Debug Info', group = g_displaySettings, tooltip = 'Show debug information about current symbol and active pair')
 
 // Open Divergence Settings
