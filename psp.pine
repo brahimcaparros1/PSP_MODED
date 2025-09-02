@@ -206,10 +206,24 @@ should_draw_divergence_line = false
 if mode == 'All precision candles'
     should_draw_divergence_line := had_divergence_prev
 else if mode == 'PSP only'
-    // Check if previous candle was a PSP (swing point with divergence)
-    prevIsSwingHigh = high[1] > high[2] and high[1] > high[0]
-    prevIsSwingLow = low[1] < low[2] and low[1] < low[0]
-    prevIsPSP = (prevIsSwingHigh or prevIsSwingLow) and had_divergence_prev
+    // Check if previous candle was a PSP on BOTH assets simultaneously
+    // Asset1 swing check
+    [asset1_high_2, asset1_high_1, asset1_high_0] = request.security(asset1, timeframe.period, [high[2], high[1], high])
+    [asset1_low_2, asset1_low_1, asset1_low_0] = request.security(asset1, timeframe.period, [low[2], low[1], low])
+    asset1_SwingHigh = asset1_high_1 > asset1_high_2 and asset1_high_1 > asset1_high_0
+    asset1_SwingLow = asset1_low_1 < asset1_low_2 and asset1_low_1 < asset1_low_0
+    asset1_HasSwing = asset1_SwingHigh or asset1_SwingLow
+    
+    // Asset2 swing check
+    [asset2_high_2, asset2_high_1, asset2_high_0] = request.security(asset2, timeframe.period, [high[2], high[1], high])
+    [asset2_low_2, asset2_low_1, asset2_low_0] = request.security(asset2, timeframe.period, [low[2], low[1], low])
+    asset2_SwingHigh = asset2_high_1 > asset2_high_2 and asset2_high_1 > asset2_high_0
+    asset2_SwingLow = asset2_low_1 < asset2_low_2 and asset2_low_1 < asset2_low_0
+    asset2_HasSwing = asset2_SwingHigh or asset2_SwingLow
+    
+    // PSP ONLY if BOTH assets have a swing point simultaneously
+    bothAssetsHaveSwing = asset1_HasSwing and asset2_HasSwing
+    prevIsPSP = bothAssetsHaveSwing and had_divergence_prev
     should_draw_divergence_line := prevIsPSP
 
 // Calculate open trend divergence between candles surrounding the divergent one
@@ -281,17 +295,23 @@ if processHTF
     // HTF PSP detection for PSP only mode
     htf_is_psp = false
     if mode == 'PSP only'
-        // Determine which asset to use for PSP detection (the current asset being displayed)
-        currentAssetSymbol = isCurrentAsset1 ? asset1 : asset2
+        // Check HTF swing points on BOTH assets simultaneously
+        // Asset1 HTF swing check
+        [htf_asset1_high_2bars, htf_asset1_high_1bar, htf_asset1_high_current] = request.security(asset1, htfToUse, [high[2], high[1], high], barmerge.gaps_off, barmerge.lookahead_on)
+        [htf_asset1_low_2bars, htf_asset1_low_1bar, htf_asset1_low_current] = request.security(asset1, htfToUse, [low[2], low[1], low], barmerge.gaps_off, barmerge.lookahead_on)
+        htf_asset1_SwingHigh = htf_asset1_high_1bar > htf_asset1_high_2bars and htf_asset1_high_1bar > htf_asset1_high_current
+        htf_asset1_SwingLow = htf_asset1_low_1bar < htf_asset1_low_2bars and htf_asset1_low_1bar < htf_asset1_low_current
+        htf_asset1_HasSwing = htf_asset1_SwingHigh or htf_asset1_SwingLow
         
-        // Get HTF high/low data for the current asset (not syminfo.tickerid)
-        [htf_high_2bars, htf_high_1bar, htf_high_current] = request.security(currentAssetSymbol, htfToUse, [high[2], high[1], high], barmerge.gaps_off, barmerge.lookahead_on)
-        [htf_low_2bars, htf_low_1bar, htf_low_current] = request.security(currentAssetSymbol, htfToUse, [low[2], low[1], low], barmerge.gaps_off, barmerge.lookahead_on)
+        // Asset2 HTF swing check
+        [htf_asset2_high_2bars, htf_asset2_high_1bar, htf_asset2_high_current] = request.security(asset2, htfToUse, [high[2], high[1], high], barmerge.gaps_off, barmerge.lookahead_on)
+        [htf_asset2_low_2bars, htf_asset2_low_1bar, htf_asset2_low_current] = request.security(asset2, htfToUse, [low[2], low[1], low], barmerge.gaps_off, barmerge.lookahead_on)
+        htf_asset2_SwingHigh = htf_asset2_high_1bar > htf_asset2_high_2bars and htf_asset2_high_1bar > htf_asset2_high_current
+        htf_asset2_SwingLow = htf_asset2_low_1bar < htf_asset2_low_2bars and htf_asset2_low_1bar < htf_asset2_low_current
+        htf_asset2_HasSwing = htf_asset2_SwingHigh or htf_asset2_SwingLow
         
-        // HTF PSP logic: check if bar[1] is a swing point (same as normal logic)
-        htf_prevIsSwingHigh = htf_high_1bar > htf_high_2bars and htf_high_1bar > htf_high_current
-        htf_prevIsSwingLow = htf_low_1bar < htf_low_2bars and htf_low_1bar < htf_low_current
-        htf_is_psp := (htf_prevIsSwingHigh or htf_prevIsSwingLow) and htf_divergence_prev
+        // HTF PSP ONLY if BOTH assets have a swing point on HTF simultaneously
+        htf_is_psp := (htf_asset1_HasSwing and htf_asset2_HasSwing) and htf_divergence_prev
     
     // Determine if we should draw HTF divergence line based on mode
     htf_should_draw = false
