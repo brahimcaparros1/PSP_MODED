@@ -360,12 +360,29 @@ if processHTF
 overallBullish = belongsToAnyPair and (isCurrentAsset1 ? bullish1 : bullish2)
 overallBearish = belongsToAnyPair and (isCurrentAsset1 ? bearish1 : bearish2)
 
-// Detect swing points for PSP mode
-pivothigh = ta.pivothigh(high, 1, 1)
-pivotlow = ta.pivotlow(low, 1, 1)
-is_swing_high = not na(pivothigh)
-is_swing_low = not na(pivotlow)
-isPsp = (is_swing_high or is_swing_low) and highlight[1] // Check divergence on swing point candle
+// Detect swing points for PSP mode - must check BOTH assets for consistency
+isPsp = false
+if mode == 'PSP only' and highlight[1]
+    // Use the same logic as for line drawing: BOTH assets must have swing points
+    // Asset1 swing check for coloring
+    [asset1_high_col_2, asset1_high_col_1, asset1_high_col_0] = request.security(asset1, timeframe.period, [high[2], high[1], high])
+    [asset1_low_col_2, asset1_low_col_1, asset1_low_col_0] = request.security(asset1, timeframe.period, [low[2], low[1], low])
+    asset1_SwingHigh_col = asset1_high_col_1 > asset1_high_col_2 and asset1_high_col_1 > asset1_high_col_0
+    asset1_SwingLow_col = asset1_low_col_1 < asset1_low_col_2 and asset1_low_col_1 < asset1_low_col_0
+    asset1_HasSwing_col = asset1_SwingHigh_col or asset1_SwingLow_col
+    
+    // Asset2 swing check for coloring
+    [asset2_high_col_2, asset2_high_col_1, asset2_high_col_0] = request.security(asset2, timeframe.period, [high[2], high[1], high])
+    [asset2_low_col_2, asset2_low_col_1, asset2_low_col_0] = request.security(asset2, timeframe.period, [low[2], low[1], low])
+    asset2_SwingHigh_col = asset2_high_col_1 > asset2_high_col_2 and asset2_high_col_1 > asset2_high_col_0
+    asset2_SwingLow_col = asset2_low_col_1 < asset2_low_col_2 and asset2_low_col_1 < asset2_low_col_0
+    asset2_HasSwing_col = asset2_SwingHigh_col or asset2_SwingLow_col
+    
+    // Color and shape ONLY if BOTH assets have swing points
+    isPsp := asset1_HasSwing_col and asset2_HasSwing_col
+else if mode == 'All precision candles'
+    // For All precision candles mode, just use divergence
+    isPsp := highlight[1]
 
 
 // ==================== EXECUTE PSP LOGIC
