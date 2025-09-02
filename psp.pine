@@ -165,12 +165,23 @@ highlight = current_highlight
 // Determine if current symbol is asset1 or asset2 of the active pair
 isCurrentAsset1 = isAsset1_Pair1 or isAsset1_Pair2 or isAsset1_Pair3 or isAsset1_Pair4
 
+// Check if previous candle should have divergence lines based on current mode
+should_draw_divergence_line = false
+if mode == 'All precision candles'
+    should_draw_divergence_line := had_divergence_prev
+else if mode == 'PSP only'
+    // Check if previous candle was a PSP (swing point with divergence)
+    prevIsSwingHigh = high[1] > high[2] and high[1] > high[0]
+    prevIsSwingLow = low[1] < low[2] and low[1] < low[0]
+    prevIsPSP = (prevIsSwingHigh or prevIsSwingLow) and had_divergence_prev
+    should_draw_divergence_line := prevIsPSP
+
 // Calculate open trend divergence between candles surrounding the divergent one
 open_divergence_exists = false
 open_divergence_bullish = false
 open_divergence_bearish = false
 
-if belongsToAnyPair and showOpenDivergence and had_divergence_prev
+if belongsToAnyPair and showOpenDivergence and should_draw_divergence_line
     // Trend from before divergence to after (current)
     // Asset 1 trend: from open[2] to open[0]
     asset1_trend_up = asset1_open > asset1_open_before
@@ -186,7 +197,7 @@ if belongsToAnyPair and showOpenDivergence and had_divergence_prev
     open_divergence_exists := open_divergence_bullish or open_divergence_bearish
 
 // Draw lines between opens surrounding the divergent candle
-if had_divergence_prev and open_divergence_exists and barstate.isconfirmed and showOpenDivergence
+if should_draw_divergence_line and open_divergence_exists and barstate.isconfirmed and showOpenDivergence
     // Line color based on divergence type
     lineColor = open_divergence_bullish ? color.rgb(0, 255, 0, 0) : color.rgb(255, 0, 0, 0)
     
