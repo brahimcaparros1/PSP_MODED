@@ -238,9 +238,9 @@ if should_draw_divergence_line and open_divergence_exists and barstate.isconfirm
     lineColor = open_divergence_bullish ? color.rgb(0, 255, 0, 0) : color.rgb(255, 0, 0, 0)
     
     // Line connects open[2] to open[0], spanning over divergent candle[1]
-    // Use correct opens based on current asset
-    openBefore = isCurrentAsset1 ? asset1_open_before : asset2_open_before
-    openCurrent = isCurrentAsset1 ? asset1_open : asset2_open
+    // Use LOCAL opens of the currently displayed asset (not asset1/asset2 selection)
+    openBefore = open[2]  // Local open 2 bars ago of current asset
+    openCurrent = open    // Local current open of current asset
     divergenceLine = line.new(x1 = bar_index[2], y1 = openBefore, x2 = bar_index, y2 = openCurrent, color = lineColor, width = 2, style = line.style_solid)
     
     // Manage lines based on display mode
@@ -281,9 +281,12 @@ if processHTF
     // HTF PSP detection for PSP only mode
     htf_is_psp = false
     if mode == 'PSP only'
-        // Get HTF high/low data for PSP detection (need [2], [1], [0] like normal logic)
-        [htf_high_2bars, htf_high_1bar, htf_high_current] = request.security(syminfo.tickerid, htfToUse, [high[2], high[1], high], barmerge.gaps_off, barmerge.lookahead_on)
-        [htf_low_2bars, htf_low_1bar, htf_low_current] = request.security(syminfo.tickerid, htfToUse, [low[2], low[1], low], barmerge.gaps_off, barmerge.lookahead_on)
+        // Determine which asset to use for PSP detection (the current asset being displayed)
+        currentAssetSymbol = isCurrentAsset1 ? asset1 : asset2
+        
+        // Get HTF high/low data for the current asset (not syminfo.tickerid)
+        [htf_high_2bars, htf_high_1bar, htf_high_current] = request.security(currentAssetSymbol, htfToUse, [high[2], high[1], high], barmerge.gaps_off, barmerge.lookahead_on)
+        [htf_low_2bars, htf_low_1bar, htf_low_current] = request.security(currentAssetSymbol, htfToUse, [low[2], low[1], low], barmerge.gaps_off, barmerge.lookahead_on)
         
         // HTF PSP logic: check if bar[1] is a swing point (same as normal logic)
         htf_prevIsSwingHigh = htf_high_1bar > htf_high_2bars and htf_high_1bar > htf_high_current
@@ -318,12 +321,9 @@ if processHTF
             // HTF Line color (same as normal lines)
             htf_lineColor = htf_open_divergence_bullish ? color.rgb(0, 255, 0, 0) : color.rgb(255, 0, 0, 0)
             
-            // Get exact HTF timestamps for perfect alignment
+            // Get exact HTF timestamps and opens for the CURRENT asset (not asset1/asset2 selection)
             [htf_time_2bars_ago, htf_time_current] = request.security(syminfo.tickerid, htfToUse, [time[2], time], barmerge.gaps_off, barmerge.lookahead_on)
-            
-            // Use correct opens based on current asset
-            htf_openBefore = isCurrentAsset1 ? htf_asset1_open_2bars : htf_asset2_open_2bars
-            htf_openCurrent = isCurrentAsset1 ? htf_asset1_open_current : htf_asset2_open_current
+            [htf_openBefore, htf_openCurrent] = request.security(syminfo.tickerid, htfToUse, [open[2], open], barmerge.gaps_off, barmerge.lookahead_on)
             
             // Draw HTF line using exact timestamps for perfect temporal alignment
             htf_divergenceLine = line.new(x1 = htf_time_2bars_ago, y1 = htf_openBefore, x2 = htf_time_current, y2 = htf_openCurrent, xloc = xloc.bar_time, color = htf_lineColor, width = 2, style = line.style_solid)
