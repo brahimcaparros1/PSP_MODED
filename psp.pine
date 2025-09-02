@@ -31,19 +31,9 @@ showOpenDivergence = input.bool(true, 'Show Open Divergence Lines', group = g_op
 openDivergenceMode = input.string('Latest Only', 'Line Display Mode', options = ['All Lines', 'Latest Only'], group = g_openDivergence, tooltip = 'All Lines: Keep all divergence lines | Latest Only: Keep only the most recent lines')
 maxLines = input.int(5, 'Max Lines (Latest Only)', minval = 1, maxval = 20, group = g_openDivergence, tooltip = 'Maximum number of lines to display in Latest Only mode')
 
-// HTF Divergence Settings
-g_htfDivergence = "HTF Divergence Settings"
-showHTF = input.bool(true, 'Show HTF Divergences', group = g_htfDivergence, tooltip = 'Display Higher Timeframe divergences on specific target timeframes')
-htf1 = input.timeframe("W", "HTF 1", group = g_htfDivergence, tooltip = 'Higher timeframe 1')
-targetTF1 = input.timeframe("240", "Target TF 1", group = g_htfDivergence, tooltip = 'Target timeframe to display HTF 1 divergences')
-htf2 = input.timeframe("D", "HTF 2", group = g_htfDivergence, tooltip = 'Higher timeframe 2')
-targetTF2 = input.timeframe("60", "Target TF 2", group = g_htfDivergence, tooltip = 'Target timeframe to display HTF 2 divergences')
-htf3 = input.timeframe("240", "HTF 3", group = g_htfDivergence, tooltip = 'Higher timeframe 3')
-targetTF3 = input.timeframe("15", "Target TF 3", group = g_htfDivergence, tooltip = 'Target timeframe to display HTF 3 divergences')
-htf4 = input.timeframe("60", "HTF 4", group = g_htfDivergence, tooltip = 'Higher timeframe 4')
-targetTF4 = input.timeframe("5", "Target TF 4", group = g_htfDivergence, tooltip = 'Target timeframe to display HTF 4 divergences')
-htf5 = input.timeframe("15", "HTF 5", group = g_htfDivergence, tooltip = 'Higher timeframe 5')
-targetTF5 = input.timeframe("1", "Target TF 5", group = g_htfDivergence, tooltip = 'Target timeframe to display HTF 5 divergences')
+// Divergence Display Settings
+g_divergenceSettings = "Divergence Display Settings"
+enableDivergences = input.bool(true, 'Enable Divergences', group = g_divergenceSettings, tooltip = 'Shows divergences on supported timeframes: W, D, H4, H1, M15, M5, M1')
 
 // ==================== PSP FUNCTIONS ====================
 // Function to extract symbol without exchange prefix
@@ -148,23 +138,53 @@ else
 // Array to store divergence lines for Latest Only mode
 var array<line> divergenceLines = array.new<line>()
 
-// HTF Detection Logic
-htfToUse = ""
+// REFACTORED: Fixed timeframe logic - only 7 specific timeframes supported
+// Check if current timeframe is supported
 currentTF = timeframe.period
-if showHTF
-    if currentTF == targetTF1
-        htfToUse := htf1
-    else if currentTF == targetTF2
-        htfToUse := htf2
-    else if currentTF == targetTF3
-        htfToUse := htf3
-    else if currentTF == targetTF4
-        htfToUse := htf4
-    else if currentTF == targetTF5
-        htfToUse := htf5
+isSupported = currentTF == "1W" or currentTF == "1D" or currentTF == "240" or currentTF == "60" or currentTF == "15" or currentTF == "5" or currentTF == "1"
 
-// Flag to check if we should process HTF data
-processHTF = htfToUse != "" and belongsToAnyPair
+// DO NOT MODIFY belongsToAnyPair! It's needed for data fetching
+// Create a separate variable for display control
+canDisplay = isSupported and enableDivergences and belongsToAnyPair
+
+// Determine what to display - FIX for W and D
+showNormalDiv = false
+showHTFDiv = false
+htfToUse = ""
+
+// Weekly and Daily ONLY show normal divergences, NO HTF
+if currentTF == "1W" or currentTF == "1D"
+    showNormalDiv := true
+    showHTFDiv := false  // Explicitly no HTF
+
+// H4, H1, M15 show BOTH normal and HTF
+else if currentTF == "240"  // H4
+    showNormalDiv := true
+    showHTFDiv := true
+    htfToUse := "W"
+else if currentTF == "60"  // H1
+    showNormalDiv := true
+    showHTFDiv := true
+    htfToUse := "D"
+else if currentTF == "15"  // M15
+    showNormalDiv := true
+    showHTFDiv := true
+    htfToUse := "240"
+
+// M5 and M1 show ONLY HTF
+else if currentTF == "5"  // M5
+    showNormalDiv := false
+    showHTFDiv := true
+    htfToUse := "60"
+else if currentTF == "1"  // M1
+    showNormalDiv := false
+    showHTFDiv := true
+    htfToUse := "15"
+
+// Processing flags - ensure they work for W and D
+// Processing flags - use canDisplay instead of modifying belongsToAnyPair
+processNormal = showNormalDiv and canDisplay
+processHTF = showHTFDiv and canDisplay
 
 // Fetch data for the relevant pair only
 asset1_open = belongsToAnyPair ? request.security(asset1, timeframe.period, open) : na
@@ -186,11 +206,11 @@ bearish1 = belongsToAnyPair and asset1_close < asset1_open
 bullish2 = belongsToAnyPair and asset2_close > asset2_open
 bearish2 = belongsToAnyPair and asset2_close < asset2_open
 
-// Calculate divergence using the exact logic from the working original
+// Calculate divergence for current pair
 divergence = belongsToAnyPair and ((bullish1 and bearish2) or (bearish1 and bullish2))
 
-// Overall highlight condition (current bar)
-current_highlight = belongsToAnyPair and barstate.isconfirmed and divergence
+// Overall highlight condition (current bar) - only on supported timeframes with normal divergences
+current_highlight = processNormal and barstate.isconfirmed and divergence
 
 // Check if previous candle had divergence
 had_divergence_prev = current_highlight[1]
@@ -231,7 +251,7 @@ open_divergence_exists = false
 open_divergence_bullish = false
 open_divergence_bearish = false
 
-if belongsToAnyPair and showOpenDivergence and should_draw_divergence_line
+if processNormal and showOpenDivergence and should_draw_divergence_line
     // Trend from before divergence to after (current)
     // Asset 1 trend: from open[2] to open[0]
     asset1_trend_up = asset1_open > asset1_open_before
@@ -338,15 +358,25 @@ if processHTF
         htf_open_divergence_exists = htf_open_divergence_bullish or htf_open_divergence_bearish
         
         if htf_open_divergence_exists
-            // HTF Line color (same as normal lines)
-            htf_lineColor = htf_open_divergence_bullish ? color.rgb(0, 255, 0, 0) : color.rgb(255, 0, 0, 0)
+            // HTF Line color - use fixed color based on current timeframe (not direction-based)
+            htf_color = color.white  // Default
+            if currentTF == "240"  // H4 shows Weekly HTF
+                htf_color := color.rgb(255, 182, 193)  // Rose pâle
+            else if currentTF == "60"  // H1 shows Daily HTF
+                htf_color := color.rgb(255, 255, 0)  // Jaune
+            else if currentTF == "15"  // M15 shows H4 HTF
+                htf_color := color.rgb(65, 105, 225)  // Bleu roi
+            else if currentTF == "5"  // M5 shows H1 HTF
+                htf_color := color.rgb(255, 0, 0)  // Rouge
+            else if currentTF == "1"  // M1 shows M15 HTF
+                htf_color := color.rgb(255, 255, 255)  // Blanc
             
             // Get exact HTF timestamps and opens for the CURRENT asset (not asset1/asset2 selection)
             [htf_time_2bars_ago, htf_time_current] = request.security(syminfo.tickerid, htfToUse, [time[2], time], barmerge.gaps_off, barmerge.lookahead_on)
             [htf_openBefore, htf_openCurrent] = request.security(syminfo.tickerid, htfToUse, [open[2], open], barmerge.gaps_off, barmerge.lookahead_on)
             
             // Draw HTF line using exact timestamps for perfect temporal alignment
-            htf_divergenceLine = line.new(x1 = htf_time_2bars_ago, y1 = htf_openBefore, x2 = htf_time_current, y2 = htf_openCurrent, xloc = xloc.bar_time, color = htf_lineColor, width = 2, style = line.style_solid)
+            htf_divergenceLine = line.new(x1 = htf_time_2bars_ago, y1 = htf_openBefore, x2 = htf_time_current, y2 = htf_openCurrent, xloc = xloc.bar_time, color = htf_color, width = 2, style = line.style_solid)
             
             // Manage HTF lines (same system as normal lines)
             if openDivergenceMode == 'Latest Only'
@@ -356,9 +386,9 @@ if processHTF
                     line.delete(oldLine)
             // If 'All Lines' mode, just leave the line
 
-// Determine overall bullish/bearish direction based on the current chart asset
-overallBullish = belongsToAnyPair and (isCurrentAsset1 ? bullish1 : bullish2)
-overallBearish = belongsToAnyPair and (isCurrentAsset1 ? bearish1 : bearish2)
+// Determine overall bullish/bearish direction based on the current chart asset - only on supported timeframes with normal divergences
+overallBullish = processNormal and (isCurrentAsset1 ? bullish1 : bullish2)
+overallBearish = processNormal and (isCurrentAsset1 ? bearish1 : bearish2)
 
 // Detect swing points for PSP mode - must check BOTH assets for consistency
 isPsp = false
