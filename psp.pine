@@ -209,8 +209,8 @@ bearish2 = belongsToAnyPair and asset2_close < asset2_open
 // Calculate divergence for current pair
 divergence = belongsToAnyPair and ((bullish1 and bearish2) or (bearish1 and bullish2))
 
-// Overall highlight condition (current bar) - only on supported timeframes with normal divergences
-current_highlight = processNormal and barstate.isconfirmed and divergence
+// Overall highlight condition (current bar) - for colorization on ALL supported timeframes
+current_highlight = canDisplay and barstate.isconfirmed and divergence
 
 // Check if previous candle had divergence
 had_divergence_prev = current_highlight[1]
@@ -386,9 +386,9 @@ if processHTF
                     line.delete(oldLine)
             // If 'All Lines' mode, just leave the line
 
-// Determine overall bullish/bearish direction based on the current chart asset - only on supported timeframes with normal divergences
-overallBullish = processNormal and (isCurrentAsset1 ? bullish1 : bullish2)
-overallBearish = processNormal and (isCurrentAsset1 ? bearish1 : bearish2)
+// Determine overall bullish/bearish direction based on the current chart asset - now works on ALL timeframes for colorization
+overallBullish = belongsToAnyPair and (isCurrentAsset1 ? bullish1 : bullish2)
+overallBearish = belongsToAnyPair and (isCurrentAsset1 ? bearish1 : bearish2)
 
 // Detect swing points for PSP mode - must check BOTH assets for consistency
 isPsp = false
