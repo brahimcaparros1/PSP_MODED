@@ -33,7 +33,7 @@ maxLines = input.int(5, 'Max Lines (Latest Only)', minval = 1, maxval = 20, grou
 
 // HTF Divergence Settings
 g_htfDivergence = "HTF Divergence Settings"
-showHTF = input.bool(false, 'Show HTF Divergences', group = g_htfDivergence, tooltip = 'Display Higher Timeframe divergences on specific target timeframes')
+showHTF = input.bool(true, 'Show HTF Divergences', group = g_htfDivergence, tooltip = 'Display Higher Timeframe divergences on specific target timeframes')
 htf1 = input.timeframe("W", "HTF 1", group = g_htfDivergence, tooltip = 'Higher timeframe 1')
 targetTF1 = input.timeframe("240", "Target TF 1", group = g_htfDivergence, tooltip = 'Target timeframe to display HTF 1 divergences')
 htf2 = input.timeframe("D", "HTF 2", group = g_htfDivergence, tooltip = 'Higher timeframe 2')
@@ -55,11 +55,7 @@ extractSymbol(fullSymbol) =>
     else
         fullSymbol
 
-// Function to calculate TF ratio for HTF line positioning
-getTFRatio(htf) =>
-    currentMinutes = timeframe.in_seconds(timeframe.period) / 60
-    htfMinutes = timeframe.in_seconds(htf) / 60
-    htfMinutes / currentMinutes
+// HTF positioning now uses xloc.bar_time for perfect temporal alignment
 
 // Get the current chart symbol and check if it's part of any configured pair
 currentSymbol = syminfo.ticker
@@ -322,18 +318,15 @@ if processHTF
             // HTF Line color (same as normal lines)
             htf_lineColor = htf_open_divergence_bullish ? color.rgb(0, 255, 0, 0) : color.rgb(255, 0, 0, 0)
             
-            // Calculate correct HTF line positions using TF ratio
-            htf_ratio = getTFRatio(htfToUse)
+            // Get exact HTF timestamps for perfect alignment
+            [htf_time_2bars_ago, htf_time_current] = request.security(syminfo.tickerid, htfToUse, [time[2], time], barmerge.gaps_off, barmerge.lookahead_on)
             
             // Use correct opens based on current asset
             htf_openBefore = isCurrentAsset1 ? htf_asset1_open_2bars : htf_asset2_open_2bars
             htf_openCurrent = isCurrentAsset1 ? htf_asset1_open_current : htf_asset2_open_current
             
-            // Draw HTF line: from 2 HTF bars ago to current HTF bar start
-            htf_x1 = bar_index - int(htf_ratio * 2)  // 2 HTF bars ago
-            htf_x2 = bar_index  // Current bar (start of new HTF bar)
-            
-            htf_divergenceLine = line.new(x1 = htf_x1, y1 = htf_openBefore, x2 = htf_x2, y2 = htf_openCurrent, color = htf_lineColor, width = 2, style = line.style_solid)
+            // Draw HTF line using exact timestamps for perfect temporal alignment
+            htf_divergenceLine = line.new(x1 = htf_time_2bars_ago, y1 = htf_openBefore, x2 = htf_time_current, y2 = htf_openCurrent, xloc = xloc.bar_time, color = htf_lineColor, width = 2, style = line.style_solid)
             
             // Manage HTF lines (same system as normal lines)
             if openDivergenceMode == 'Latest Only'
