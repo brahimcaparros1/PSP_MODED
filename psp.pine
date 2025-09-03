@@ -77,9 +77,9 @@ belongsToPair3 = isAsset1_Pair3 or isAsset2_Pair3
 belongsToPair4 = isAsset1_Pair4 or isAsset2_Pair4
 belongsToAnyPair = belongsToPair1 or belongsToPair2 or belongsToPair3 or belongsToPair4
 
-// Debug labels (only show if enabled)
+// OPTIMIZED: Debug labels (only update when needed)
 var label debugLabel = na
-if showDebug
+if showDebug and barstate.islast
     pairInfo = ""
     if belongsToPair1
         pairInfo := "Pair1: " + asset1_pair1_clean + "/" + asset2_pair1_clean
@@ -98,19 +98,19 @@ if showDebug
     else
         label.set_text(debugLabel, debugText)
         label.set_xy(debugLabel, bar_index, high)
-else
+else if not showDebug and not na(debugLabel)
     // Remove debug label if debug is disabled
-    if not na(debugLabel)
-        label.delete(debugLabel)
-        debugLabel := na
+    label.delete(debugLabel)
+    debugLabel := na
 
-// If current symbol doesn't belong to any pair, show warning
+// OPTIMIZED: Warning label (only update when needed)
 var label infoLabel = na
-if not belongsToAnyPair
+if not belongsToAnyPair and barstate.islast
     if na(infoLabel)
         infoLabel := label.new(bar_index, high + ta.tr, "Symbol not part of configured pairs", 
                               style=label.style_label_down, color=color.yellow, textcolor=color.black, size=size.small)
-    label.set_xy(infoLabel, bar_index, high + ta.tr)
+    else
+        label.set_xy(infoLabel, bar_index, high + ta.tr)
 
 // Determine which assets to fetch data for based on current symbol
 asset1 = if belongsToPair1
@@ -186,28 +186,55 @@ else if currentTF == "1"  // M1
 processNormal = showNormalDiv and canDisplay
 processHTF = showHTFDiv and canDisplay
 
-// Fetch data for the relevant pair only
+// OPTIMIZED: Fetch data for the relevant pair only
 asset1_open = belongsToAnyPair ? request.security(asset1, timeframe.period, open) : na
 asset1_close = belongsToAnyPair ? request.security(asset1, timeframe.period, close) : na
+asset1_open_before = belongsToAnyPair ? request.security(asset1, timeframe.period, open[2]) : na
+
+asset1_high = belongsToAnyPair ? request.security(asset1, timeframe.period, high) : na
+asset1_low = belongsToAnyPair ? request.security(asset1, timeframe.period, low) : na
+asset1_high_1 = belongsToAnyPair ? request.security(asset1, timeframe.period, high[1]) : na
+asset1_low_1 = belongsToAnyPair ? request.security(asset1, timeframe.period, low[1]) : na
+asset1_high_2 = belongsToAnyPair ? request.security(asset1, timeframe.period, high[2]) : na
+asset1_low_2 = belongsToAnyPair ? request.security(asset1, timeframe.period, low[2]) : na
+
 asset2_open = belongsToAnyPair ? request.security(asset2, timeframe.period, open) : na
 asset2_close = belongsToAnyPair ? request.security(asset2, timeframe.period, close) : na
-
-// Fetch opens for the candles surrounding a divergence
-// Open 2 bars ago (before divergence candle)
-asset1_open_before = belongsToAnyPair ? request.security(asset1, timeframe.period, open[2]) : na
 asset2_open_before = belongsToAnyPair ? request.security(asset2, timeframe.period, open[2]) : na
-// Current open will be used for the candle after divergence
 
-// HTF Data Fetching - Now handled directly in HTF logic section
+asset2_high = belongsToAnyPair ? request.security(asset2, timeframe.period, high) : na
+asset2_low = belongsToAnyPair ? request.security(asset2, timeframe.period, low) : na
+asset2_high_1 = belongsToAnyPair ? request.security(asset2, timeframe.period, high[1]) : na
+asset2_low_1 = belongsToAnyPair ? request.security(asset2, timeframe.period, low[1]) : na
+asset2_high_2 = belongsToAnyPair ? request.security(asset2, timeframe.period, high[2]) : na
+asset2_low_2 = belongsToAnyPair ? request.security(asset2, timeframe.period, low[2]) : na
 
-// Calculate divergence for the current pair only
-bullish1 = belongsToAnyPair and asset1_close > asset1_open
-bearish1 = belongsToAnyPair and asset1_close < asset1_open
-bullish2 = belongsToAnyPair and asset2_close > asset2_open
-bearish2 = belongsToAnyPair and asset2_close < asset2_open
+// OPTIMIZED: Calculate swing points ONCE and reuse everywhere
+asset1_SwingHigh = asset1_high_1 > asset1_high_2 and asset1_high_1 > asset1_high
+asset1_SwingLow = asset1_low_1 < asset1_low_2 and asset1_low_1 < asset1_low
+asset1_HasSwing = asset1_SwingHigh or asset1_SwingLow
 
-// Calculate divergence for current pair
-divergence = belongsToAnyPair and ((bullish1 and bearish2) or (bearish1 and bullish2))
+asset2_SwingHigh = asset2_high_1 > asset2_high_2 and asset2_high_1 > asset2_high
+asset2_SwingLow = asset2_low_1 < asset2_low_2 and asset2_low_1 < asset2_low
+asset2_HasSwing = asset2_SwingHigh or asset2_SwingLow
+
+// PSP condition: BOTH assets must have swing points simultaneously
+bothAssetsHaveSwing = asset1_HasSwing and asset2_HasSwing
+
+// OPTIMIZED: Only calculate normal divergence when needed (not on M5/M1)
+bullish1 = false
+bearish1 = false
+bullish2 = false
+bearish2 = false
+divergence = false
+
+if processNormal
+    bullish1 := belongsToAnyPair and asset1_close > asset1_open
+    bearish1 := belongsToAnyPair and asset1_close < asset1_open
+    bullish2 := belongsToAnyPair and asset2_close > asset2_open
+    bearish2 := belongsToAnyPair and asset2_close < asset2_open
+    // Calculate divergence for current pair
+    divergence := belongsToAnyPair and ((bullish1 and bearish2) or (bearish1 and bullish2))
 
 // Overall highlight condition (current bar) - for colorization on ALL supported timeframes
 current_highlight = canDisplay and barstate.isconfirmed and divergence
@@ -226,23 +253,7 @@ should_draw_divergence_line = false
 if mode == 'All precision candles'
     should_draw_divergence_line := had_divergence_prev
 else if mode == 'PSP only'
-    // Check if previous candle was a PSP on BOTH assets simultaneously
-    // Asset1 swing check
-    [asset1_high_2, asset1_high_1, asset1_high_0] = request.security(asset1, timeframe.period, [high[2], high[1], high])
-    [asset1_low_2, asset1_low_1, asset1_low_0] = request.security(asset1, timeframe.period, [low[2], low[1], low])
-    asset1_SwingHigh = asset1_high_1 > asset1_high_2 and asset1_high_1 > asset1_high_0
-    asset1_SwingLow = asset1_low_1 < asset1_low_2 and asset1_low_1 < asset1_low_0
-    asset1_HasSwing = asset1_SwingHigh or asset1_SwingLow
-    
-    // Asset2 swing check
-    [asset2_high_2, asset2_high_1, asset2_high_0] = request.security(asset2, timeframe.period, [high[2], high[1], high])
-    [asset2_low_2, asset2_low_1, asset2_low_0] = request.security(asset2, timeframe.period, [low[2], low[1], low])
-    asset2_SwingHigh = asset2_high_1 > asset2_high_2 and asset2_high_1 > asset2_high_0
-    asset2_SwingLow = asset2_low_1 < asset2_low_2 and asset2_low_1 < asset2_low_0
-    asset2_HasSwing = asset2_SwingHigh or asset2_SwingLow
-    
-    // PSP ONLY if BOTH assets have a swing point simultaneously
-    bothAssetsHaveSwing = asset1_HasSwing and asset2_HasSwing
+    // OPTIMIZED: Use pre-calculated swing points
     prevIsPSP = bothAssetsHaveSwing and had_divergence_prev
     should_draw_divergence_line := prevIsPSP
 
@@ -403,26 +414,11 @@ if processHTF
 overallBullish = processNormal and (isCurrentAsset1 ? bullish1 : bullish2)
 overallBearish = processNormal and (isCurrentAsset1 ? bearish1 : bearish2)
 
-// Detect swing points for PSP mode - must check BOTH assets for consistency
+// OPTIMIZED: Detect swing points for PSP mode using pre-calculated values
 isPsp = false
 if mode == 'PSP only' and highlight[1]
-    // Use the same logic as for line drawing: BOTH assets must have swing points
-    // Asset1 swing check for coloring
-    [asset1_high_col_2, asset1_high_col_1, asset1_high_col_0] = request.security(asset1, timeframe.period, [high[2], high[1], high])
-    [asset1_low_col_2, asset1_low_col_1, asset1_low_col_0] = request.security(asset1, timeframe.period, [low[2], low[1], low])
-    asset1_SwingHigh_col = asset1_high_col_1 > asset1_high_col_2 and asset1_high_col_1 > asset1_high_col_0
-    asset1_SwingLow_col = asset1_low_col_1 < asset1_low_col_2 and asset1_low_col_1 < asset1_low_col_0
-    asset1_HasSwing_col = asset1_SwingHigh_col or asset1_SwingLow_col
-    
-    // Asset2 swing check for coloring
-    [asset2_high_col_2, asset2_high_col_1, asset2_high_col_0] = request.security(asset2, timeframe.period, [high[2], high[1], high])
-    [asset2_low_col_2, asset2_low_col_1, asset2_low_col_0] = request.security(asset2, timeframe.period, [low[2], low[1], low])
-    asset2_SwingHigh_col = asset2_high_col_1 > asset2_high_col_2 and asset2_high_col_1 > asset2_high_col_0
-    asset2_SwingLow_col = asset2_low_col_1 < asset2_low_col_2 and asset2_low_col_1 < asset2_low_col_0
-    asset2_HasSwing_col = asset2_SwingHigh_col or asset2_SwingLow_col
-    
-    // Color and shape ONLY if BOTH assets have swing points
-    isPsp := asset1_HasSwing_col and asset2_HasSwing_col
+    // OPTIMIZED: Use pre-calculated swing points
+    isPsp := bothAssetsHaveSwing
 else if mode == 'All precision candles'
     // For All precision candles mode, just use divergence
     isPsp := highlight[1]
