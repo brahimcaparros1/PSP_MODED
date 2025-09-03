@@ -295,6 +295,9 @@ if should_draw_divergence_line and open_divergence_exists and barstate.isconfirm
             line.delete(oldLine)
     // If 'All Lines' mode, just leave the line (no management needed)
 
+// Track if a line was actually drawn on previous bar
+line_was_drawn = should_draw_divergence_line and open_divergence_exists and barstate.isconfirmed[1]
+
 // ==================== HTF DIVERGENCE LOGIC ====================
 // HTF Divergence calculation and line drawing - COMPLETELY REFACTORED
 if processHTF
@@ -396,9 +399,9 @@ if processHTF
                     line.delete(oldLine)
             // If 'All Lines' mode, just leave the line
 
-// Determine overall bullish/bearish direction based on the current chart asset - now works on ALL timeframes for colorization
-overallBullish = belongsToAnyPair and (isCurrentAsset1 ? bullish1 : bullish2)
-overallBearish = belongsToAnyPair and (isCurrentAsset1 ? bearish1 : bearish2)
+// Determine overall bullish/bearish ONLY for normal divergences, NOT HTF
+overallBullish = processNormal and (isCurrentAsset1 ? bullish1 : bullish2)
+overallBearish = processNormal and (isCurrentAsset1 ? bearish1 : bearish2)
 
 // Detect swing points for PSP mode - must check BOTH assets for consistency
 isPsp = false
@@ -431,34 +434,38 @@ isSwingHigh = high > high[1] and high > high[0]
 isSwingLow = low < low[1] and low < low[0]
 isPSP = (isSwingHigh or isSwingLow) and highlight
 
-// Set bar color based on display mode and PSP mode
+// Set bar color based on display mode and PSP mode - ONLY when line is drawn
 var color barColor = na
 if mode == 'All precision candles'
-    barColor := highlight ? (overallBullish ? color.green : color.red) : na
-else if mode != 'All precision candles'
-    barColor := isPsp ? (overallBullish[1] ? color.green : color.red) : na
+    // Color ONLY if a line was drawn (divergence + open divergence)
+    barColor := line_was_drawn ? (overallBullish[1] ? color.green : color.red) : na
+else if mode == 'PSP only'
+    // Color ONLY if PSP AND line was drawn
+    barColor := (isPsp and line_was_drawn) ? (overallBullish[1] ? color.green : color.red) : na
 
 barcolor(barColor, offset = -1)// Apply bar color
 
-// Plot shapes for 'All precision candles' mode
-plotshape(mode == 'All precision candles' and highlight and overallBullish, 
+// Plot shapes for 'All precision candles' mode - ONLY when line is drawn
+plotshape(mode == 'All precision candles' and line_was_drawn and overallBullish[1], 
           style = shape.circle, 
           location = location.belowbar, 
           color = color.green, 
           size = size.auto, 
+          offset = -1,
           title = 'Bullish PC',
           display = display.none)
 
-plotshape(mode == 'All precision candles' and highlight and overallBearish, 
+plotshape(mode == 'All precision candles' and line_was_drawn and overallBearish[1], 
           style = shape.circle, 
           location = location.abovebar, 
           color = color.red, 
           size = size.auto, 
+          offset = -1,
           title = 'Bearish PC',
           display = display.none)
 
-// Plot shapes for 'PSP only' mode
-plotshape(mode == 'PSP only' and isPsp and overallBullish[1], 
+// Plot shapes for 'PSP only' mode - ONLY when PSP AND line is drawn
+plotshape(mode == 'PSP only' and isPsp and line_was_drawn and overallBullish[1], 
           style = shape.circle, 
           location = location.belowbar, 
           color = color.green, 
@@ -467,7 +474,7 @@ plotshape(mode == 'PSP only' and isPsp and overallBullish[1],
           title = 'Bullish PSP',
           display = display.none)
 
-plotshape(mode == 'PSP only' and isPsp and overallBearish[1], 
+plotshape(mode == 'PSP only' and isPsp and line_was_drawn and overallBearish[1], 
           style = shape.circle, 
           location = location.abovebar, 
           color = color.red, 
