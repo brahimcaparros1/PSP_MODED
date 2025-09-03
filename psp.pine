@@ -268,8 +268,18 @@ if processNormal and showOpenDivergence and should_draw_divergence_line
 
 // Draw lines between opens surrounding the divergent candle
 if should_draw_divergence_line and open_divergence_exists and barstate.isconfirmed and showOpenDivergence
-    // Line color based on divergence type
-    lineColor = open_divergence_bullish ? color.rgb(0, 255, 0, 0) : color.rgb(255, 0, 0, 0)
+    // Line color based on current timeframe (same as HTF colors)
+    lineColor = color.white  // Default
+    if currentTF == "1W"      // Weekly
+        lineColor := color.rgb(255, 182, 193)  // Rose pâle
+    else if currentTF == "1D"  // Daily
+        lineColor := color.rgb(255, 255, 0)    // Jaune
+    else if currentTF == "240" // H4
+        lineColor := color.rgb(65, 105, 225)   // Bleu roi
+    else if currentTF == "60"  // H1
+        lineColor := color.rgb(255, 0, 0)      // Rouge
+    else if currentTF == "15"  // M15
+        lineColor := color.rgb(255, 255, 255)  // Blanc
     
     // Line connects open[2] to open[0], spanning over divergent candle[1]
     // Use LOCAL opens of the currently displayed asset (not asset1/asset2 selection)
