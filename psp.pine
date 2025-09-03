@@ -434,9 +434,9 @@ isPSP = (isSwingHigh or isSwingLow) and highlight
 // Set bar color based on display mode and PSP mode
 var color barColor = na
 if mode == 'All precision candles'
-    barColor := highlight ? (overallBullish ? color.rgb(103, 143, 109) : color.rgb(219, 87, 85)) : na
+    barColor := highlight ? (overallBullish ? color.green : color.red) : na
 else if mode != 'All precision candles'
-    barColor := isPsp ? (overallBullish[1] ? color.rgb(117, 173, 120) : color.rgb(182, 105, 107)) : na
+    barColor := isPsp ? (overallBullish[1] ? color.green : color.red) : na
 
 barcolor(barColor, offset = -1)// Apply bar color
 
@@ -444,33 +444,37 @@ barcolor(barColor, offset = -1)// Apply bar color
 plotshape(mode == 'All precision candles' and highlight and overallBullish, 
           style = shape.circle, 
           location = location.belowbar, 
-          color = color.rgb(103, 143, 109), 
+          color = color.green, 
           size = size.auto, 
-          title = 'Bullish PC')
+          title = 'Bullish PC',
+          display = display.none)
 
 plotshape(mode == 'All precision candles' and highlight and overallBearish, 
           style = shape.circle, 
           location = location.abovebar, 
-          color = color.rgb(219, 87, 85), 
+          color = color.red, 
           size = size.auto, 
-          title = 'Bearish PC')
+          title = 'Bearish PC',
+          display = display.none)
 
 // Plot shapes for 'PSP only' mode
 plotshape(mode == 'PSP only' and isPsp and overallBullish[1], 
           style = shape.circle, 
           location = location.belowbar, 
-          color = color.rgb(117, 173, 120), 
+          color = color.green, 
           size = size.auto, 
           offset = -1, 
-          title = 'Bullish PSP')
+          title = 'Bullish PSP',
+          display = display.none)
 
 plotshape(mode == 'PSP only' and isPsp and overallBearish[1], 
           style = shape.circle, 
           location = location.abovebar, 
-          color = color.rgb(182, 105, 107), 
+          color = color.red, 
           size = size.auto, 
           offset = -1, 
-          title = 'Bearish PSP')
+          title = 'Bearish PSP',
+          display = display.none)
 
 // Clean up lines when open divergence feature is disabled
 if not showOpenDivergence and array.size(divergenceLines) > 0
