@@ -412,15 +412,19 @@ isSwingHigh = high > high[1] and high > high[0]
 isSwingLow = low < low[1] and low < low[0]
 isPSP = (isSwingHigh or isSwingLow) and highlight
 
-// Set bar color based on display mode - ONLY when any line (LTF or HTF) is drawn
+// Set bar color based on display mode
+// On M5 and M1 (HTF-only), do NOT color bars
 var color barColor = na
 any_line_drawn = line_was_drawn or htf_line_drawn_now
-if mode == 'All precision candles'
-    // Color ONLY if a line was drawn (divergence + open divergence)
-    barColor := any_line_drawn ? (overallBullish[1] ? color.green : color.red) : na
-else if mode == 'PSP only'
-    // Color like the other mode: only requires a line was drawn (no swing requirement)
-    barColor := any_line_drawn ? (overallBullish[1] ? color.green : color.red) : na
+if processNormal
+    if mode == 'All precision candles'
+        // Color ONLY if a line was drawn (divergence + open divergence)
+        barColor := any_line_drawn ? (overallBullish[1] ? color.green : color.red) : na
+    else if mode == 'PSP only'
+        // Color like the other mode: only requires a line was drawn (no swing requirement)
+        barColor := any_line_drawn ? (overallBullish[1] ? color.green : color.red) : na
+else
+    barColor := na
 
 barcolor(barColor, offset = -1)// Apply bar color
 
