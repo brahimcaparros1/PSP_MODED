@@ -22,7 +22,7 @@ asset2_pair4_input = input.symbol("BINANCE:ETHUSDT.P", "Asset 2", group=g_pair4)
 
 // Display Settings
 g_displaySettings = "Display Settings"
-mode = input.string('PSP only', 'Mode', options = ['PSP only', 'All precision candles'], group = g_displaySettings, tooltip = 'Select the mode for highlighting candles. \'All precision candles\' highlights all divergence candles, while \'PSP only\' highlights only Precision Swing Points with divergence.')
+mode = input.string('All precision candles', 'Mode', options = ['PSP only', 'All precision candles'], group = g_displaySettings, tooltip = 'Select the mode for highlighting candles. \'All precision candles\' highlights all divergence candles, while \'PSP only\' highlights only Precision Swing Points with divergence.')
 showDebug = input.bool(false, 'Show Debug Info', group = g_displaySettings, tooltip = 'Show debug information about current symbol and active pair')
 
 // Open Divergence Settings
@@ -273,18 +273,11 @@ if processNormal and showOpenDivergence and should_draw_divergence_line
 
 // Draw lines between opens surrounding the divergent candle
 if should_draw_divergence_line and open_divergence_exists and barstate.isconfirmed and showOpenDivergence
-    // Line color based on current timeframe (same as HTF colors)
-    lineColor = color.white  // Default
-    if currentTF == "1W"      // Weekly
-        lineColor := color.rgb(255, 182, 193)  // Rose pâle
-    else if currentTF == "1D"  // Daily
-        lineColor := color.rgb(255, 255, 0)    // Jaune
-    else if currentTF == "240" // H4
-        lineColor := color.rgb(65, 105, 225)   // Bleu roi
-    else if currentTF == "60"  // H1
-        lineColor := color.rgb(255, 0, 0)      // Rouge
-    else if currentTF == "15"  // M15
-        lineColor := color.rgb(255, 255, 255)  // Blanc
+    // Line color based on HH/LL of the colored candle [1] vs previous [2]
+    localLL = low[1] < low[2]
+    localHH = high[1] > high[2]
+    insideBar = high[1] <= high[2] and low[1] >= low[2]
+    lineColor = insideBar ? color.white : localHH and not localLL ? color.red : localLL and not localHH ? color.green : color.red
     
     // Line connects close[2] to open[0], spanning over divergent candle[1]
     // Use LOCAL values of the currently displayed asset (not asset1/asset2 selection)
@@ -300,11 +293,13 @@ if should_draw_divergence_line and open_divergence_exists and barstate.isconfirm
             line.delete(oldLine)
     // If 'All Lines' mode, just leave the line (no management needed)
 
-// Track if a line was actually drawn on previous bar
-line_was_drawn = should_draw_divergence_line and open_divergence_exists and barstate.isconfirmed[1]
+// Track if a line was actually drawn on previous bar (only when line drawing is enabled)
+line_was_drawn = showOpenDivergence and should_draw_divergence_line and open_divergence_exists and barstate.isconfirmed[1]
 
 // ==================== HTF DIVERGENCE LOGIC ====================
 // HTF Divergence calculation and line drawing - COMPLETELY REFACTORED
+// Track if an HTF line is drawn on this bar (for coloring gate)
+htf_line_drawn_now = false
 if processHTF
     // Detect new HTF bar
     htf_new_bar = ta.change(time(htfToUse)) != 0
@@ -372,21 +367,16 @@ if processHTF
         htf_open_divergence_exists = htf_open_divergence_bullish or htf_open_divergence_bearish
         
         if htf_open_divergence_exists
-            // HTF Line color - use fixed color based on current timeframe (not direction-based)
-            htf_color = color.white  // Default
-            if currentTF == "240"  // H4 shows Weekly HTF
-                htf_color := color.rgb(255, 182, 193)  // Rose pâle
-            else if currentTF == "60"  // H1 shows Daily HTF
-                htf_color := color.rgb(255, 255, 0)  // Jaune
-            else if currentTF == "15"  // M15 shows H4 HTF
-                htf_color := color.rgb(65, 105, 225)  // Bleu roi
-            else if currentTF == "5"  // M5 shows H1 HTF
-                htf_color := color.rgb(255, 0, 0)  // Rouge
-            else if currentTF == "1"  // M1 shows M15 HTF
-                htf_color := color.rgb(255, 255, 255)  // Blanc
+            // HTF line color based on HH/LL of HTF colored candle [1] vs previous [2]
+            [htf_low1, htf_low2, htf_high1, htf_high2] = request.security(syminfo.tickerid, htfToUse, [low[1], low[2], high[1], high[2]], barmerge.gaps_off, barmerge.lookahead_on)
+            htfLL = htf_low1 < htf_low2
+            htfHH = htf_high1 > htf_high2
+            htf_insideBar = htf_high1 <= htf_high2 and htf_low1 >= htf_low2
+            htf_color = htf_insideBar ? color.white : htfHH and not htfLL ? color.red : htfLL and not htfHH ? color.green : color.red
             
             // Get exact HTF timestamps and points for the CURRENT asset (not asset1/asset2 selection)
-            [htf_time_2bars_ago, htf_time_current] = request.security(syminfo.tickerid, htfToUse, [time[2], time], barmerge.gaps_off, barmerge.lookahead_on)
+            // Start at the CLOSE of bar [2] (which is the OPEN time of bar [1]) and go to the OPEN of bar [0]
+            [htf_time_2bars_ago, htf_time_current] = request.security(syminfo.tickerid, htfToUse, [time[1], time], barmerge.gaps_off, barmerge.lookahead_on)
             [htf_prevPoint, htf_openCurrent] = request.security(syminfo.tickerid, htfToUse, [close[2], open], barmerge.gaps_off, barmerge.lookahead_on)
             
             // Draw HTF line using exact timestamps for perfect temporal alignment
@@ -399,6 +389,8 @@ if processHTF
                     oldLine = array.shift(divergenceLines)
                     line.delete(oldLine)
             // If 'All Lines' mode, just leave the line
+            // Mark that an HTF line was drawn on this bar
+            htf_line_drawn_now := true
 
 // Determine overall bullish/bearish ONLY for normal divergences, NOT HTF
 overallBullish = processNormal and (isCurrentAsset1 ? bullish1 : bullish2)
@@ -420,19 +412,20 @@ isSwingHigh = high > high[1] and high > high[0]
 isSwingLow = low < low[1] and low < low[0]
 isPSP = (isSwingHigh or isSwingLow) and highlight
 
-// Set bar color based on display mode and PSP mode - ONLY when line is drawn
+// Set bar color based on display mode - ONLY when any line (LTF or HTF) is drawn
 var color barColor = na
+any_line_drawn = line_was_drawn or htf_line_drawn_now
 if mode == 'All precision candles'
     // Color ONLY if a line was drawn (divergence + open divergence)
-    barColor := line_was_drawn ? (overallBullish[1] ? color.green : color.red) : na
+    barColor := any_line_drawn ? (overallBullish[1] ? color.green : color.red) : na
 else if mode == 'PSP only'
     // Color like the other mode: only requires a line was drawn (no swing requirement)
-    barColor := line_was_drawn ? (overallBullish[1] ? color.green : color.red) : na
+    barColor := any_line_drawn ? (overallBullish[1] ? color.green : color.red) : na
 
 barcolor(barColor, offset = -1)// Apply bar color
 
 // Plot shapes for 'All precision candles' mode - ONLY when line is drawn
-plotshape(mode == 'All precision candles' and line_was_drawn and overallBullish[1], 
+plotshape(mode == 'All precision candles' and any_line_drawn and overallBullish[1], 
           style = shape.circle, 
           location = location.belowbar, 
           color = color.green, 
@@ -441,7 +434,7 @@ plotshape(mode == 'All precision candles' and line_was_drawn and overallBullish[
           title = 'Bullish PC',
           display = display.none)
 
-plotshape(mode == 'All precision candles' and line_was_drawn and overallBearish[1], 
+plotshape(mode == 'All precision candles' and any_line_drawn and overallBearish[1], 
           style = shape.circle, 
           location = location.abovebar, 
           color = color.red, 
@@ -451,7 +444,7 @@ plotshape(mode == 'All precision candles' and line_was_drawn and overallBearish[
           display = display.none)
 
 // Plot shapes for 'PSP only' mode - ONLY when PSP AND line is drawn
-plotshape(mode == 'PSP only' and isPsp and line_was_drawn and overallBullish[1], 
+plotshape(mode == 'PSP only' and isPsp and any_line_drawn and overallBullish[1], 
           style = shape.circle, 
           location = location.belowbar, 
           color = color.green, 
@@ -460,7 +453,7 @@ plotshape(mode == 'PSP only' and isPsp and line_was_drawn and overallBullish[1],
           title = 'Bullish PSP',
           display = display.none)
 
-plotshape(mode == 'PSP only' and isPsp and line_was_drawn and overallBearish[1], 
+plotshape(mode == 'PSP only' and isPsp and any_line_drawn and overallBearish[1], 
           style = shape.circle, 
           location = location.abovebar, 
           color = color.red, 
