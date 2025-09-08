@@ -374,13 +374,30 @@ if processHTF
             htf_insideBar = htf_high1 <= htf_high2 and htf_low1 >= htf_low2
             htf_color = htf_insideBar ? color.white : htfHH and not htfLL ? color.red : htfLL and not htfHH ? color.green : color.red
             
-            // Get exact HTF timestamps and points for the CURRENT asset (not asset1/asset2 selection)
-            // Start at the CLOSE of bar [2] (which is the OPEN time of bar [1]) and go to the OPEN of bar [0]
-            [htf_time_2bars_ago, htf_time_current] = request.security(syminfo.tickerid, htfToUse, [time[1], time], barmerge.gaps_off, barmerge.lookahead_on)
-            [htf_prevPoint, htf_openCurrent] = request.security(syminfo.tickerid, htfToUse, [close[2], open], barmerge.gaps_off, barmerge.lookahead_on)
+            // Get HTF values and timestamps
+            [htf_time_start_1, htf_time_current] = request.security(syminfo.tickerid, htfToUse, [time[1], time], barmerge.gaps_off, barmerge.lookahead_on)
             
-            // Draw HTF line using exact timestamps for perfect temporal alignment
-            htf_divergenceLine = line.new(x1 = htf_time_2bars_ago, y1 = htf_prevPoint, x2 = htf_time_current, y2 = htf_openCurrent, xloc = xloc.bar_time, color = htf_color, width = 2, style = line.style_solid)
+            // Find the last bar of the current timeframe that belongs to HTF[2]
+            // HTF[1] starts at htf_time_start_1, so we need the bar just before that
+            x1_bar_index = bar_index
+            bars_back = 0
+            for i = 0 to 500  // Look back up to 500 bars
+                if time[i] < htf_time_start_1
+                    // Found a bar that's before HTF[1], so it belongs to HTF[2] or earlier
+                    x1_bar_index := bar_index - i
+                    bars_back := i
+                    break
+            
+            // Get the close value from the LOCAL bar at x1_bar_index (last bar of HTF[2])
+            htf_prevPoint = close[bars_back]
+            
+            // Get current open value for endpoint
+            htf_openCurrent = open
+            
+            x2_bar_index = bar_index
+            
+            // Draw HTF line using bar indices for accurate positioning  
+            htf_divergenceLine = line.new(x1 = x1_bar_index, y1 = htf_prevPoint, x2 = x2_bar_index, y2 = htf_openCurrent, xloc = xloc.bar_index, color = htf_color, width = 2, style = line.style_solid)
             
             // Manage HTF lines (same system as normal lines)
             if openDivergenceMode == 'Latest Only'
