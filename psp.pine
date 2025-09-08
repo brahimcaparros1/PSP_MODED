@@ -189,7 +189,7 @@ processHTF = showHTFDiv and canDisplay
 // OPTIMIZED: Fetch data for the relevant pair only
 asset1_open = belongsToAnyPair ? request.security(asset1, timeframe.period, open) : na
 asset1_close = belongsToAnyPair ? request.security(asset1, timeframe.period, close) : na
-asset1_open_before = belongsToAnyPair ? request.security(asset1, timeframe.period, open[2]) : na
+asset1_close_before = belongsToAnyPair ? request.security(asset1, timeframe.period, close[2]) : na
 
 asset1_high = belongsToAnyPair ? request.security(asset1, timeframe.period, high) : na
 asset1_low = belongsToAnyPair ? request.security(asset1, timeframe.period, low) : na
@@ -200,7 +200,7 @@ asset1_low_2 = belongsToAnyPair ? request.security(asset1, timeframe.period, low
 
 asset2_open = belongsToAnyPair ? request.security(asset2, timeframe.period, open) : na
 asset2_close = belongsToAnyPair ? request.security(asset2, timeframe.period, close) : na
-asset2_open_before = belongsToAnyPair ? request.security(asset2, timeframe.period, open[2]) : na
+asset2_close_before = belongsToAnyPair ? request.security(asset2, timeframe.period, close[2]) : na
 
 asset2_high = belongsToAnyPair ? request.security(asset2, timeframe.period, high) : na
 asset2_low = belongsToAnyPair ? request.security(asset2, timeframe.period, low) : na
@@ -264,13 +264,13 @@ open_divergence_bearish = false
 
 if processNormal and showOpenDivergence and should_draw_divergence_line
     // Trend from before divergence to after (current)
-    // Asset 1 trend: from open[2] to open[0]
-    asset1_trend_up = asset1_open > asset1_open_before
-    asset1_trend_down = asset1_open < asset1_open_before
+    // Asset 1 trend: from close[2] to open[0]
+    asset1_trend_up = asset1_open > asset1_close_before
+    asset1_trend_down = asset1_open < asset1_close_before
     
-    // Asset 2 trend: from open[2] to open[0]
-    asset2_trend_up = asset2_open > asset2_open_before
-    asset2_trend_down = asset2_open < asset2_open_before
+    // Asset 2 trend: from close[2] to open[0]
+    asset2_trend_up = asset2_open > asset2_close_before
+    asset2_trend_down = asset2_open < asset2_close_before
     
     // Divergence: opposite trends
     open_divergence_bullish := asset1_trend_up and asset2_trend_down
@@ -292,11 +292,11 @@ if should_draw_divergence_line and open_divergence_exists and barstate.isconfirm
     else if currentTF == "15"  // M15
         lineColor := color.rgb(255, 255, 255)  // Blanc
     
-    // Line connects open[2] to open[0], spanning over divergent candle[1]
-    // Use LOCAL opens of the currently displayed asset (not asset1/asset2 selection)
-    openBefore = open[2]  // Local open 2 bars ago of current asset
-    openCurrent = open    // Local current open of current asset
-    divergenceLine = line.new(x1 = bar_index[2], y1 = openBefore, x2 = bar_index, y2 = openCurrent, color = lineColor, width = 2, style = line.style_solid)
+    // Line connects close[2] to open[0], spanning over divergent candle[1]
+    // Use LOCAL values of the currently displayed asset (not asset1/asset2 selection)
+    prevPoint = close[2]   // Local close 2 bars ago of current asset
+    openCurrent = open     // Local current open of current asset
+    divergenceLine = line.new(x1 = bar_index[2], y1 = prevPoint, x2 = bar_index, y2 = openCurrent, color = lineColor, width = 2, style = line.style_solid)
     
     // Manage lines based on display mode
     if openDivergenceMode == 'Latest Only'
@@ -366,15 +366,15 @@ if processHTF
     
     // Calculate HTF open trend divergence if we should draw
     if htf_should_draw and showOpenDivergence and htf_new_bar
-        // Get HTF opens for line drawing (open[2] to open[0] on HTF)
-        [htf_asset1_open_2bars, htf_asset1_open_current] = request.security(asset1, htfToUse, [open[2], open], barmerge.gaps_off, barmerge.lookahead_on)
-        [htf_asset2_open_2bars, htf_asset2_open_current] = request.security(asset2, htfToUse, [open[2], open], barmerge.gaps_off, barmerge.lookahead_on)
+        // Get HTF points for trend comparison (close[2] to open[0] on HTF)
+        [htf_asset1_close_2bars, htf_asset1_open_current] = request.security(asset1, htfToUse, [close[2], open], barmerge.gaps_off, barmerge.lookahead_on)
+        [htf_asset2_close_2bars, htf_asset2_open_current] = request.security(asset2, htfToUse, [close[2], open], barmerge.gaps_off, barmerge.lookahead_on)
         
-        // HTF Asset trends: from open[2] to open[0] on HTF
-        htf_asset1_trend_up = htf_asset1_open_current > htf_asset1_open_2bars
-        htf_asset1_trend_down = htf_asset1_open_current < htf_asset1_open_2bars
-        htf_asset2_trend_up = htf_asset2_open_current > htf_asset2_open_2bars
-        htf_asset2_trend_down = htf_asset2_open_current < htf_asset2_open_2bars
+        // HTF Asset trends: from close[2] to open[0] on HTF
+        htf_asset1_trend_up = htf_asset1_open_current > htf_asset1_close_2bars
+        htf_asset1_trend_down = htf_asset1_open_current < htf_asset1_close_2bars
+        htf_asset2_trend_up = htf_asset2_open_current > htf_asset2_close_2bars
+        htf_asset2_trend_down = htf_asset2_open_current < htf_asset2_close_2bars
         
         // HTF Open divergence: opposite trends
         htf_open_divergence_bullish = htf_asset1_trend_up and htf_asset2_trend_down
@@ -395,12 +395,12 @@ if processHTF
             else if currentTF == "1"  // M1 shows M15 HTF
                 htf_color := color.rgb(255, 255, 255)  // Blanc
             
-            // Get exact HTF timestamps and opens for the CURRENT asset (not asset1/asset2 selection)
+            // Get exact HTF timestamps and points for the CURRENT asset (not asset1/asset2 selection)
             [htf_time_2bars_ago, htf_time_current] = request.security(syminfo.tickerid, htfToUse, [time[2], time], barmerge.gaps_off, barmerge.lookahead_on)
-            [htf_openBefore, htf_openCurrent] = request.security(syminfo.tickerid, htfToUse, [open[2], open], barmerge.gaps_off, barmerge.lookahead_on)
+            [htf_prevPoint, htf_openCurrent] = request.security(syminfo.tickerid, htfToUse, [close[2], open], barmerge.gaps_off, barmerge.lookahead_on)
             
             // Draw HTF line using exact timestamps for perfect temporal alignment
-            htf_divergenceLine = line.new(x1 = htf_time_2bars_ago, y1 = htf_openBefore, x2 = htf_time_current, y2 = htf_openCurrent, xloc = xloc.bar_time, color = htf_color, width = 2, style = line.style_solid)
+            htf_divergenceLine = line.new(x1 = htf_time_2bars_ago, y1 = htf_prevPoint, x2 = htf_time_current, y2 = htf_openCurrent, xloc = xloc.bar_time, color = htf_color, width = 2, style = line.style_solid)
             
             // Manage HTF lines (same system as normal lines)
             if openDivergenceMode == 'Latest Only'
