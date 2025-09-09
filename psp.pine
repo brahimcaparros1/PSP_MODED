@@ -277,7 +277,16 @@ if should_draw_divergence_line and open_divergence_exists and barstate.isconfirm
     localLL = low[1] < low[2]
     localHH = high[1] > high[2]
     insideBar = high[1] <= high[2] and low[1] >= low[2]
-    lineColor = insideBar ? color.white : localHH and not localLL ? color.red : localLL and not localHH ? color.green : color.red
+    // New white-line conditions with tick tolerance:
+    // - Equal High OR Equal Low with previous candle (within 1 tick),
+    //   but only if the opposite extreme is NOT broken.
+    // - Both LL and HH (outside bar / engulfing) → white
+    eqTol = syminfo.mintick
+    eqHigh = math.abs(high[1] - high[2]) <= eqTol
+    eqLow  = math.abs(low[1]  - low[2])  <= eqTol
+    outsideBar = localHH and localLL
+    whiteCond = insideBar or outsideBar or (eqHigh and not localLL) or (eqLow and not localHH)
+    lineColor = whiteCond ? color.white : localHH and not localLL ? color.red : localLL and not localHH ? color.green : color.red
     
     // Line connects close[2] to open[0], spanning over divergent candle[1]
     // Use LOCAL values of the currently displayed asset (not asset1/asset2 selection)
