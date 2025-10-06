@@ -35,6 +35,50 @@ maxLines = input.int(5, 'Max Lines (Latest Only)', minval = 1, maxval = 20, grou
 g_divergenceSettings = "Divergence Display Settings"
 enableDivergences = input.bool(true, 'Enable Divergences', group = g_divergenceSettings, tooltip = 'Shows divergences on supported timeframes: W, D, H4, H1, M15, M5, M1')
 
+// Timeframe visibility controls (tickboxes per base timeframe)
+g_visibilityNormal = "Normal Divergence Visibility"
+normalShow1W = input.bool(true, 'Show Normal on 1W', group = g_visibilityNormal)
+normalShow1D = input.bool(true, 'Show Normal on 1D', group = g_visibilityNormal)
+normalShow240 = input.bool(true, 'Show Normal on 4H', group = g_visibilityNormal)
+normalShow60 = input.bool(true, 'Show Normal on 1H', group = g_visibilityNormal)
+normalShow15 = input.bool(true, 'Show Normal on 15m', group = g_visibilityNormal)
+normalShow5 = input.bool(true, 'Show Normal on 5m', group = g_visibilityNormal)
+normalShow1 = input.bool(true, 'Show Normal on 1m', group = g_visibilityNormal)
+
+g_visibilityHTF = "HTF Divergence Visibility"
+htfShow1W = input.bool(true, 'Show HTF on 1W', group = g_visibilityHTF)
+htfShow1D = input.bool(true, 'Show HTF on 1D', group = g_visibilityHTF)
+htfShow240 = input.bool(true, 'Show HTF on 4H', group = g_visibilityHTF)
+htfShow60 = input.bool(true, 'Show HTF on 1H', group = g_visibilityHTF)
+htfShow15 = input.bool(true, 'Show HTF on 15m', group = g_visibilityHTF)
+htfShow5 = input.bool(true, 'Show HTF on 5m', group = g_visibilityHTF)
+htfShow1 = input.bool(true, 'Show HTF on 1m', group = g_visibilityHTF)
+
+// HTF source mapping (customisable higher timeframe for each base timeframe)
+g_htfSources = "HTF Source Mapping"
+htfSource1W = input.timeframe('1M', '1W HTF Source', group = g_htfSources, tooltip = 'Higher timeframe used when displaying HTF divergences while on 1W charts')
+htfSource1D = input.timeframe('1W', '1D HTF Source', group = g_htfSources, tooltip = 'Higher timeframe used when displaying HTF divergences while on 1D charts')
+htfSource240 = input.timeframe('W', '4H HTF Source', group = g_htfSources, tooltip = 'Higher timeframe used when displaying HTF divergences while on 4H charts')
+htfSource60 = input.timeframe('D', '1H HTF Source', group = g_htfSources, tooltip = 'Higher timeframe used when displaying HTF divergences while on 1H charts')
+htfSource15 = input.timeframe('240', '15m HTF Source', group = g_htfSources, tooltip = 'Higher timeframe used when displaying HTF divergences while on 15m charts')
+htfSource5 = input.timeframe('60', '5m HTF Source', group = g_htfSources, tooltip = 'Higher timeframe used when displaying HTF divergences while on 5m charts')
+htfSource1 = input.timeframe('15', '1m HTF Source', group = g_htfSources, tooltip = 'Higher timeframe used when displaying HTF divergences while on 1m charts')
+
+// Color customisation (color boxes)
+g_colorSettings = "Color Settings"
+bullishLineColor = input.color(color.green, 'Bullish Line', group = g_colorSettings)
+bearishLineColor = input.color(color.red, 'Bearish Line', group = g_colorSettings)
+neutralLineColor = input.color(color.white, 'Neutral Line', group = g_colorSettings)
+bullishBarColor = input.color(color.green, 'Bullish Bar', group = g_colorSettings)
+bearishBarColor = input.color(color.red, 'Bearish Bar', group = g_colorSettings)
+bullishShapeColor = input.color(color.green, 'Bullish Label/Shape', group = g_colorSettings)
+bearishShapeColor = input.color(color.red, 'Bearish Label/Shape', group = g_colorSettings)
+neutralLabelColor = input.color(color.new(color.white, 0), 'Neutral Label', group = g_colorSettings)
+
+// Label controls
+g_labelSettings = "Label Settings"
+showDivergenceLabels = input.bool(false, 'Show Divergence Labels', group = g_labelSettings, tooltip = 'When enabled, labels are added near divergence candles. Disable to hide all divergence labels.')
+
 // ==================== PSP FUNCTIONS ====================
 // Function to extract symbol without exchange prefix
 extractSymbol(fullSymbol) =>
@@ -137,89 +181,59 @@ else
 
 // Array to store divergence lines for Latest Only mode
 var array<line> divergenceLines = array.new<line>()
+var array<label> divergenceLabels = array.new<label>()
 
 // REFACTORED: Fixed timeframe logic - only 7 specific timeframes supported
 // Check if current timeframe is supported
 currentTF = timeframe.period
-isSupported = currentTF == "1W" or currentTF == "1D" or currentTF == "240" or currentTF == "60" or currentTF == "15" or currentTF == "5" or currentTF == "1"
+isBaseTF = currentTF == "1W" or currentTF == "1D" or currentTF == "240" or currentTF == "60" or currentTF == "15" or currentTF == "5" or currentTF == "1"
 
 // DO NOT MODIFY belongsToAnyPair! It's needed for data fetching
 // Create a separate variable for display control
-canDisplay = isSupported and enableDivergences and belongsToAnyPair
+canDisplay = isBaseTF and enableDivergences and belongsToAnyPair
 
-// Determine what to display - FIX for W and D
-showNormalDiv = false
-showHTFDiv = false
-htfToUse = ""
+// Determine per-timeframe visibility from tickboxes
+normalEnabled = switch currentTF
+    "1W" => normalShow1W
+    "1D" => normalShow1D
+    "240" => normalShow240
+    "60" => normalShow60
+    "15" => normalShow15
+    "5" => normalShow5
+    "1" => normalShow1
+    => false
 
-// Weekly and Daily ONLY show normal divergences, NO HTF
-if currentTF == "1W" or currentTF == "1D"
-    showNormalDiv := true
-    showHTFDiv := false  // Explicitly no HTF
+htfEnabled = switch currentTF
+    "1W" => htfShow1W
+    "1D" => htfShow1D
+    "240" => htfShow240
+    "60" => htfShow60
+    "15" => htfShow15
+    "5" => htfShow5
+    "1" => htfShow1
+    => false
 
-// H4, H1, M15 show BOTH normal and HTF
-else if currentTF == "240"  // H4
-    showNormalDiv := true
-    showHTFDiv := true
-    htfToUse := "W"
-else if currentTF == "60"  // H1
-    showNormalDiv := true
-    showHTFDiv := true
-    htfToUse := "D"
-else if currentTF == "15"  // M15
-    showNormalDiv := true
-    showHTFDiv := true
-    htfToUse := "240"
+htfToUse = switch currentTF
+    "1W" => htfSource1W
+    "1D" => htfSource1D
+    "240" => htfSource240
+    "60" => htfSource60
+    "15" => htfSource15
+    "5" => htfSource5
+    "1" => htfSource1
+    => ""
 
-// M5 and M1 show ONLY HTF
-else if currentTF == "5"  // M5
-    showNormalDiv := false
-    showHTFDiv := true
-    htfToUse := "60"
-else if currentTF == "1"  // M1
-    showNormalDiv := false
-    showHTFDiv := true
-    htfToUse := "15"
-
-// Processing flags - ensure they work for W and D
-// Processing flags - use canDisplay instead of modifying belongsToAnyPair
-processNormal = showNormalDiv and canDisplay
-processHTF = showHTFDiv and canDisplay
+processNormal = normalEnabled and canDisplay
+processHTF = htfEnabled and canDisplay and str.length(htfToUse) > 0
 
 // OPTIMIZED: Fetch data for the relevant pair only
 asset1_open = belongsToAnyPair ? request.security(asset1, timeframe.period, open) : na
 asset1_close = belongsToAnyPair ? request.security(asset1, timeframe.period, close) : na
 asset1_close_before = belongsToAnyPair ? request.security(asset1, timeframe.period, close[2]) : na
 
-asset1_high = belongsToAnyPair ? request.security(asset1, timeframe.period, high) : na
-asset1_low = belongsToAnyPair ? request.security(asset1, timeframe.period, low) : na
-asset1_high_1 = belongsToAnyPair ? request.security(asset1, timeframe.period, high[1]) : na
-asset1_low_1 = belongsToAnyPair ? request.security(asset1, timeframe.period, low[1]) : na
-asset1_high_2 = belongsToAnyPair ? request.security(asset1, timeframe.period, high[2]) : na
-asset1_low_2 = belongsToAnyPair ? request.security(asset1, timeframe.period, low[2]) : na
-
 asset2_open = belongsToAnyPair ? request.security(asset2, timeframe.period, open) : na
 asset2_close = belongsToAnyPair ? request.security(asset2, timeframe.period, close) : na
 asset2_close_before = belongsToAnyPair ? request.security(asset2, timeframe.period, close[2]) : na
-
-asset2_high = belongsToAnyPair ? request.security(asset2, timeframe.period, high) : na
-asset2_low = belongsToAnyPair ? request.security(asset2, timeframe.period, low) : na
-asset2_high_1 = belongsToAnyPair ? request.security(asset2, timeframe.period, high[1]) : na
-asset2_low_1 = belongsToAnyPair ? request.security(asset2, timeframe.period, low[1]) : na
-asset2_high_2 = belongsToAnyPair ? request.security(asset2, timeframe.period, high[2]) : na
-asset2_low_2 = belongsToAnyPair ? request.security(asset2, timeframe.period, low[2]) : na
-
-// OPTIMIZED: Calculate swing points ONCE and reuse everywhere
-asset1_SwingHigh = asset1_high_1 > asset1_high_2 and asset1_high_1 > asset1_high
-asset1_SwingLow = asset1_low_1 < asset1_low_2 and asset1_low_1 < asset1_low
-asset1_HasSwing = asset1_SwingHigh or asset1_SwingLow
-
-asset2_SwingHigh = asset2_high_1 > asset2_high_2 and asset2_high_1 > asset2_high
-asset2_SwingLow = asset2_low_1 < asset2_low_2 and asset2_low_1 < asset2_low
-asset2_HasSwing = asset2_SwingHigh or asset2_SwingLow
-
-// PSP condition: BOTH assets must have swing points simultaneously
-bothAssetsHaveSwing = asset1_HasSwing and asset2_HasSwing
 
 // OPTIMIZED: Only calculate normal divergence when needed (not on M5/M1)
 bullish1 = false
@@ -256,6 +270,8 @@ open_divergence_exists = false
 open_divergence_bullish = false
 open_divergence_bearish = false
 
+line_drawn_now = false
+
 if processNormal and showOpenDivergence and should_draw_divergence_line
     // Trend from before divergence to after (current)
     // Asset 1 trend: from close[2] to open[0]
@@ -286,24 +302,41 @@ if should_draw_divergence_line and open_divergence_exists and barstate.isconfirm
     eqLow  = math.abs(low[1]  - low[2])  <= eqTol
     outsideBar = localHH and localLL
     whiteCond = insideBar or outsideBar or (eqHigh and not localLL) or (eqLow and not localHH)
-    lineColor = whiteCond ? color.white : localHH and not localLL ? color.red : localLL and not localHH ? color.green : color.red
+    lineColor = whiteCond ? neutralLineColor : localHH and not localLL ? bearishLineColor : localLL and not localHH ? bullishLineColor : bearishLineColor
     
     // Line connects close[2] to open[0], spanning over divergent candle[1]
     // Use LOCAL values of the currently displayed asset (not asset1/asset2 selection)
     prevPoint = close[2]   // Local close 2 bars ago of current asset
     openCurrent = open     // Local current open of current asset
     divergenceLine = line.new(x1 = bar_index[2], y1 = prevPoint, x2 = bar_index, y2 = openCurrent, color = lineColor, width = 2, style = line.style_solid)
+    label divergenceLabel = na
+    if showDivergenceLabels
+        labelText = open_divergence_bullish ? 'Bull Div' : open_divergence_bearish ? 'Bear Div' : 'Div'
+        labelColor = open_divergence_bullish ? bullishShapeColor : open_divergence_bearish ? bearishShapeColor : neutralLabelColor
+        labelPrice = (prevPoint + openCurrent) / 2.0
+        divergenceLabel := label.new(bar_index[1], labelPrice, labelText, 
+                                     xloc = xloc.bar_index, 
+                                     style = label.style_label_center, 
+                                     color = color.new(labelColor, 70), 
+                                     textcolor = color.white, 
+                                     size = size.tiny)
     
     // Manage lines based on display mode
     if openDivergenceMode == 'Latest Only'
         array.push(divergenceLines, divergenceLine)
+        array.push(divergenceLabels, divergenceLabel)
         if array.size(divergenceLines) > maxLines
             oldLine = array.shift(divergenceLines)
             line.delete(oldLine)
+            oldLabel = array.shift(divergenceLabels)
+            if not na(oldLabel)
+                label.delete(oldLabel)
     // If 'All Lines' mode, just leave the line (no management needed)
+    else
+        array.push(divergenceLines, divergenceLine)
+        array.push(divergenceLabels, divergenceLabel)
 
-// Track if a line was actually drawn on previous bar (only when line drawing is enabled)
-line_was_drawn = showOpenDivergence and should_draw_divergence_line and open_divergence_exists and barstate.isconfirmed[1]
+    line_drawn_now := true
 
 // ==================== HTF DIVERGENCE LOGIC ====================
 // HTF Divergence calculation and line drawing - COMPLETELY REFACTORED
@@ -334,27 +367,6 @@ if processHTF
     htf_divergence_current = (htf_bullish1 and htf_bearish2) or (htf_bearish1 and htf_bullish2)
     htf_divergence_prev = (htf_bullish1_prev and htf_bearish2_prev) or (htf_bearish1_prev and htf_bullish2_prev)
     
-    // HTF PSP detection for PSP only mode
-    htf_is_psp = false
-    if mode == 'PSP only'
-        // Check HTF swing points on BOTH assets simultaneously
-        // Asset1 HTF swing check
-        [htf_asset1_high_2bars, htf_asset1_high_1bar, htf_asset1_high_current] = request.security(asset1, htfToUse, [high[2], high[1], high], barmerge.gaps_off, barmerge.lookahead_on)
-        [htf_asset1_low_2bars, htf_asset1_low_1bar, htf_asset1_low_current] = request.security(asset1, htfToUse, [low[2], low[1], low], barmerge.gaps_off, barmerge.lookahead_on)
-        htf_asset1_SwingHigh = htf_asset1_high_1bar > htf_asset1_high_2bars and htf_asset1_high_1bar > htf_asset1_high_current
-        htf_asset1_SwingLow = htf_asset1_low_1bar < htf_asset1_low_2bars and htf_asset1_low_1bar < htf_asset1_low_current
-        htf_asset1_HasSwing = htf_asset1_SwingHigh or htf_asset1_SwingLow
-        
-        // Asset2 HTF swing check
-        [htf_asset2_high_2bars, htf_asset2_high_1bar, htf_asset2_high_current] = request.security(asset2, htfToUse, [high[2], high[1], high], barmerge.gaps_off, barmerge.lookahead_on)
-        [htf_asset2_low_2bars, htf_asset2_low_1bar, htf_asset2_low_current] = request.security(asset2, htfToUse, [low[2], low[1], low], barmerge.gaps_off, barmerge.lookahead_on)
-        htf_asset2_SwingHigh = htf_asset2_high_1bar > htf_asset2_high_2bars and htf_asset2_high_1bar > htf_asset2_high_current
-        htf_asset2_SwingLow = htf_asset2_low_1bar < htf_asset2_low_2bars and htf_asset2_low_1bar < htf_asset2_low_current
-        htf_asset2_HasSwing = htf_asset2_SwingHigh or htf_asset2_SwingLow
-        
-        // HTF PSP ONLY if BOTH assets have a swing point on HTF simultaneously
-        htf_is_psp := (htf_asset1_HasSwing and htf_asset2_HasSwing) and htf_divergence_prev
-    
     // Determine if we should draw HTF divergence line: now only requires HTF divergence on [1], no swing requirement
     htf_should_draw = htf_divergence_prev
     
@@ -381,7 +393,7 @@ if processHTF
             htfLL = htf_low1 < htf_low2
             htfHH = htf_high1 > htf_high2
             htf_insideBar = htf_high1 <= htf_high2 and htf_low1 >= htf_low2
-            htf_color = htf_insideBar ? color.white : htfHH and not htfLL ? color.red : htfLL and not htfHH ? color.green : color.red
+            htf_color = htf_insideBar ? neutralLineColor : htfHH and not htfLL ? bearishLineColor : htfLL and not htfHH ? bullishLineColor : bearishLineColor
             
             // Get HTF values and timestamps
             [htf_time_start_1, htf_time_current] = request.security(syminfo.tickerid, htfToUse, [time[1], time], barmerge.gaps_off, barmerge.lookahead_on)
@@ -407,14 +419,32 @@ if processHTF
             
             // Draw HTF line using bar indices for accurate positioning  
             htf_divergenceLine = line.new(x1 = x1_bar_index, y1 = htf_prevPoint, x2 = x2_bar_index, y2 = htf_openCurrent, xloc = xloc.bar_index, color = htf_color, width = 2, style = line.style_solid)
+            label htf_divergenceLabel = na
+            if showDivergenceLabels
+                labelText = htf_open_divergence_bullish ? 'HTF Bull Div' : htf_open_divergence_bearish ? 'HTF Bear Div' : 'HTF Div'
+                labelColor = htf_open_divergence_bullish ? bullishShapeColor : htf_open_divergence_bearish ? bearishShapeColor : neutralLabelColor
+                labelPrice = (htf_prevPoint + htf_openCurrent) / 2.0
+                htf_divergenceLabel := label.new(bar_index, labelPrice, labelText, 
+                                                 xloc = xloc.bar_index, 
+                                                 style = label.style_label_center, 
+                                                 color = color.new(labelColor, 70), 
+                                                 textcolor = color.white, 
+                                                 size = size.tiny)
             
             // Manage HTF lines (same system as normal lines)
             if openDivergenceMode == 'Latest Only'
                 array.push(divergenceLines, htf_divergenceLine)
+                array.push(divergenceLabels, htf_divergenceLabel)
                 if array.size(divergenceLines) > maxLines
                     oldLine = array.shift(divergenceLines)
                     line.delete(oldLine)
+                    oldLabel = array.shift(divergenceLabels)
+                    if not na(oldLabel)
+                        label.delete(oldLabel)
             // If 'All Lines' mode, just leave the line
+            else
+                array.push(divergenceLines, htf_divergenceLine)
+                array.push(divergenceLabels, htf_divergenceLabel)
             // Mark that an HTF line was drawn on this bar
             htf_line_drawn_now := true
 
@@ -422,33 +452,26 @@ if processHTF
 overallBullish = processNormal and (isCurrentAsset1 ? bullish1 : bullish2)
 overallBearish = processNormal and (isCurrentAsset1 ? bearish1 : bearish2)
 
-// OPTIMIZED: Detect swing points for PSP mode using pre-calculated values
-isPsp = false
-if mode == 'PSP only' and highlight[1]
-    // OPTIMIZED: Use pre-calculated swing points
-    isPsp := bothAssetsHaveSwing
-else if mode == 'All precision candles'
-    // For All precision candles mode, just use divergence
-    isPsp := highlight[1]
-
+// Detect PSP condition without 3-candle swing requirement
+lineTriggered = line_drawn_now or htf_line_drawn_now
+divergenceDetected = highlight[1] or lineTriggered
+isPsp = if mode == 'PSP only'
+    divergenceDetected and lineTriggered
+else
+    divergenceDetected
 
 // ==================== EXECUTE PSP LOGIC
-// Define da conditions for direct PSP detection
-isSwingHigh = high > high[1] and high > high[0]
-isSwingLow = low < low[1] and low < low[0]
-isPSP = (isSwingHigh or isSwingLow) and highlight
-
 // Set bar color based on display mode
 // On M5 and M1 (HTF-only), do NOT color bars
 var color barColor = na
-any_line_drawn = line_was_drawn or htf_line_drawn_now
+any_line_drawn = lineTriggered
 if processNormal
     if mode == 'All precision candles'
         // Color ONLY if a line was drawn (divergence + open divergence)
-        barColor := any_line_drawn ? (overallBullish[1] ? color.green : color.red) : na
+        barColor := any_line_drawn ? (overallBullish[1] ? bullishBarColor : bearishBarColor) : na
     else if mode == 'PSP only'
         // Color like the other mode: only requires a line was drawn (no swing requirement)
-        barColor := any_line_drawn ? (overallBullish[1] ? color.green : color.red) : na
+        barColor := any_line_drawn ? (overallBullish[1] ? bullishBarColor : bearishBarColor) : na
 else
     barColor := na
 
@@ -458,7 +481,7 @@ barcolor(barColor, offset = -1)// Apply bar color
 plotshape(mode == 'All precision candles' and any_line_drawn and overallBullish[1], 
           style = shape.circle, 
           location = location.belowbar, 
-          color = color.green, 
+          color = bullishShapeColor, 
           size = size.auto, 
           offset = -1,
           title = 'Bullish PC',
@@ -467,7 +490,7 @@ plotshape(mode == 'All precision candles' and any_line_drawn and overallBullish[
 plotshape(mode == 'All precision candles' and any_line_drawn and overallBearish[1], 
           style = shape.circle, 
           location = location.abovebar, 
-          color = color.red, 
+          color = bearishShapeColor, 
           size = size.auto, 
           offset = -1,
           title = 'Bearish PC',
@@ -477,7 +500,7 @@ plotshape(mode == 'All precision candles' and any_line_drawn and overallBearish[
 plotshape(mode == 'PSP only' and isPsp and any_line_drawn and overallBullish[1], 
           style = shape.circle, 
           location = location.belowbar, 
-          color = color.green, 
+          color = bullishShapeColor, 
           size = size.auto, 
           offset = -1, 
           title = 'Bullish PSP',
@@ -486,7 +509,7 @@ plotshape(mode == 'PSP only' and isPsp and any_line_drawn and overallBullish[1],
 plotshape(mode == 'PSP only' and isPsp and any_line_drawn and overallBearish[1], 
           style = shape.circle, 
           location = location.abovebar, 
-          color = color.red, 
+          color = bearishShapeColor, 
           size = size.auto, 
           offset = -1, 
           title = 'Bearish PSP',
@@ -497,3 +520,14 @@ if not showOpenDivergence and array.size(divergenceLines) > 0
     for i = 0 to array.size(divergenceLines) - 1
         line.delete(array.get(divergenceLines, i))
     array.clear(divergenceLines)
+    for i = 0 to array.size(divergenceLabels) - 1
+        existingLabel = array.get(divergenceLabels, i)
+        if not na(existingLabel)
+            label.delete(existingLabel)
+    array.clear(divergenceLabels)
+else if not showDivergenceLabels and array.size(divergenceLabels) > 0
+    for i = 0 to array.size(divergenceLabels) - 1
+        existingLabel = array.get(divergenceLabels, i)
+        if not na(existingLabel)
+            label.delete(existingLabel)
+        array.set(divergenceLabels, i, na)
