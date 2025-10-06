@@ -28,7 +28,7 @@ showDebug = input.bool(false, 'Show Debug Info', group = g_displaySettings, tool
 // Open Divergence Settings
 g_openDivergence = "Open Divergence Lines"
 showOpenDivergence = input.bool(true, 'Show Open Divergence Lines', group = g_openDivergence, tooltip = 'Draw lines when opens show divergence trend between assets')
-openDivergenceMode = input.string('Latest Only', 'Line Display Mode', options = ['All Lines', 'Latest Only'], group = g_openDivergence, tooltip = 'All Lines: Keep all divergence lines | Latest Only: Keep only the most recent lines')
+openDivergenceMode = input.string('All Lines', 'Line Display Mode', options = ['All Lines', 'Latest Only'], group = g_openDivergence, tooltip = 'All Lines: Keep all divergence lines | Latest Only: Keep only the most recent lines')
 maxLines = input.int(5, 'Max Lines (Latest Only)', minval = 1, maxval = 20, group = g_openDivergence, tooltip = 'Maximum number of lines to display in Latest Only mode')
 
 // Divergence Display Settings
@@ -56,19 +56,24 @@ htfShow1 = input.bool(true, 'Show HTF on 1m', group = g_visibilityHTF)
 
 // HTF source mapping (customisable higher timeframe for each base timeframe)
 g_htfSources = "HTF Source Mapping"
-htfSource1W = input.timeframe('1M', '1W HTF Source', group = g_htfSources, tooltip = 'Higher timeframe used when displaying HTF divergences while on 1W charts')
-htfSource1D = input.timeframe('1W', '1D HTF Source', group = g_htfSources, tooltip = 'Higher timeframe used when displaying HTF divergences while on 1D charts')
-htfSource240 = input.timeframe('W', '4H HTF Source', group = g_htfSources, tooltip = 'Higher timeframe used when displaying HTF divergences while on 4H charts')
-htfSource60 = input.timeframe('D', '1H HTF Source', group = g_htfSources, tooltip = 'Higher timeframe used when displaying HTF divergences while on 1H charts')
-htfSource15 = input.timeframe('240', '15m HTF Source', group = g_htfSources, tooltip = 'Higher timeframe used when displaying HTF divergences while on 15m charts')
-htfSource5 = input.timeframe('60', '5m HTF Source', group = g_htfSources, tooltip = 'Higher timeframe used when displaying HTF divergences while on 5m charts')
-htfSource1 = input.timeframe('15', '1m HTF Source', group = g_htfSources, tooltip = 'Higher timeframe used when displaying HTF divergences while on 1m charts')
+htfSource240_enabled = input.bool(true, 'Show Weekly (view 4H)', group = g_htfSources, inline = 'htf240')
+htfSource240 = input.timeframe('W', 'Source', group = g_htfSources, inline = 'htf240')
+htfSource60_enabled = input.bool(true, 'Show Daily (view 1H)', group = g_htfSources, inline = 'htf60')
+htfSource60 = input.timeframe('D', 'Source', group = g_htfSources, inline = 'htf60')
+htfSource15_enabled = input.bool(true, 'Show 4H (view 15m)', group = g_htfSources, inline = 'htf15')
+htfSource15 = input.timeframe('240', 'Source', group = g_htfSources, inline = 'htf15')
+htfSource5_enabled = input.bool(true, 'Show 1H (view 5m)', group = g_htfSources, inline = 'htf5')
+htfSource5 = input.timeframe('60', 'Source', group = g_htfSources, inline = 'htf5')
+htfSource1_enabled = input.bool(true, 'Show 15m (view 1m)', group = g_htfSources, inline = 'htf1')
+htfSource1 = input.timeframe('15', 'Source', group = g_htfSources, inline = 'htf1')
 
 // Color customisation (color boxes)
 g_colorSettings = "Color Settings"
-bullishLineColor = input.color(color.green, 'Bullish Line', group = g_colorSettings)
-bearishLineColor = input.color(color.red, 'Bearish Line', group = g_colorSettings)
-neutralLineColor = input.color(color.white, 'Neutral Line', group = g_colorSettings)
+htfColorWeekOnH4 = input.color(color.rgb(255, 182, 193), 'Weekly Lines (4H view)', group = g_colorSettings)
+htfColorDayOnH1 = input.color(color.yellow, 'Daily Lines (1H view)', group = g_colorSettings)
+htfColorH4OnM15 = input.color(color.rgb(65, 105, 225), '4H Lines (15m view)', group = g_colorSettings)
+htfColorH1OnM5 = input.color(color.red, '1H Lines (5m view)', group = g_colorSettings)
+htfColorM15OnM1 = input.color(color.white, '15m Lines (1m view)', group = g_colorSettings)
 bullishBarColor = input.color(color.green, 'Bullish Bar', group = g_colorSettings)
 bearishBarColor = input.color(color.red, 'Bearish Bar', group = g_colorSettings)
 bullishShapeColor = input.color(color.green, 'Bullish Label/Shape', group = g_colorSettings)
@@ -213,18 +218,27 @@ htfEnabled = switch currentTF
     "1" => htfShow1
     => false
 
-htfToUse = switch currentTF
-    "1W" => htfSource1W
-    "1D" => htfSource1D
-    "240" => htfSource240
-    "60" => htfSource60
-    "15" => htfSource15
-    "5" => htfSource5
-    "1" => htfSource1
-    => ""
+htfToUse = ""
+htfSourceActive = false
+switch currentTF
+    "240" =>
+        htfToUse := htfSource240
+        htfSourceActive := htfSource240_enabled
+    "60" =>
+        htfToUse := htfSource60
+        htfSourceActive := htfSource60_enabled
+    "15" =>
+        htfToUse := htfSource15
+        htfSourceActive := htfSource15_enabled
+    "5" =>
+        htfToUse := htfSource5
+        htfSourceActive := htfSource5_enabled
+    "1" =>
+        htfToUse := htfSource1
+        htfSourceActive := htfSource1_enabled
 
 processNormal = normalEnabled and canDisplay
-processHTF = htfEnabled and canDisplay and str.length(htfToUse) > 0
+processHTF = htfEnabled and htfSourceActive and canDisplay and str.length(htfToUse) > 0
 
 // OPTIMIZED: Fetch data for the relevant pair only
 asset1_open = belongsToAnyPair ? request.security(asset1, timeframe.period, open) : na
@@ -302,7 +316,7 @@ if should_draw_divergence_line and open_divergence_exists and barstate.isconfirm
     eqLow  = math.abs(low[1]  - low[2])  <= eqTol
     outsideBar = localHH and localLL
     whiteCond = insideBar or outsideBar or (eqHigh and not localLL) or (eqLow and not localHH)
-    lineColor = whiteCond ? neutralLineColor : localHH and not localLL ? bearishLineColor : localLL and not localHH ? bullishLineColor : bearishLineColor
+    lineColor = whiteCond ? color.white : localHH and not localLL ? color.red : localLL and not localHH ? color.green : color.red
     
     // Line connects close[2] to open[0], spanning over divergent candle[1]
     // Use LOCAL values of the currently displayed asset (not asset1/asset2 selection)
@@ -388,15 +402,17 @@ if processHTF
         htf_open_divergence_exists = htf_open_divergence_bullish or htf_open_divergence_bearish
         
         if htf_open_divergence_exists
-            // HTF line color based on HH/LL of HTF colored candle [1] vs previous [2]
-            [htf_low1, htf_low2, htf_high1, htf_high2] = request.security(syminfo.tickerid, htfToUse, [low[1], low[2], high[1], high[2]], barmerge.gaps_off, barmerge.lookahead_on)
-            htfLL = htf_low1 < htf_low2
-            htfHH = htf_high1 > htf_high2
-            htf_insideBar = htf_high1 <= htf_high2 and htf_low1 >= htf_low2
-            htf_color = htf_insideBar ? neutralLineColor : htfHH and not htfLL ? bearishLineColor : htfLL and not htfHH ? bullishLineColor : bearishLineColor
+            // HTF line color selected per lower timeframe mapping
+            htf_color = switch currentTF
+                "240" => htfColorWeekOnH4
+                "60" => htfColorDayOnH1
+                "15" => htfColorH4OnM15
+                "5" => htfColorH1OnM5
+                "1" => htfColorM15OnM1
+                => color.white
             
             // Get HTF values and timestamps
-            [htf_time_start_1, htf_time_current] = request.security(syminfo.tickerid, htfToUse, [time[1], time], barmerge.gaps_off, barmerge.lookahead_on)
+            htf_time_start_1 = request.security(syminfo.tickerid, htfToUse, time[1], barmerge.gaps_off, barmerge.lookahead_on)
             
             // Find the last bar of the current timeframe that belongs to HTF[2]
             // HTF[1] starts at htf_time_start_1, so we need the bar just before that
@@ -422,7 +438,7 @@ if processHTF
             label htf_divergenceLabel = na
             if showDivergenceLabels
                 labelText = htf_open_divergence_bullish ? 'HTF Bull Div' : htf_open_divergence_bearish ? 'HTF Bear Div' : 'HTF Div'
-                labelColor = htf_open_divergence_bullish ? bullishShapeColor : htf_open_divergence_bearish ? bearishShapeColor : neutralLabelColor
+                labelColor = htf_color
                 labelPrice = (htf_prevPoint + htf_openCurrent) / 2.0
                 htf_divergenceLabel := label.new(bar_index, labelPrice, labelText, 
                                                  xloc = xloc.bar_index, 
